@@ -195,12 +195,22 @@ ENVEOF
                             }
                             
                             # Pull latest images
+                            echo "Pulling backend image: ${ECR_BACKEND_REPO}:latest"
                             docker pull ${ECR_BACKEND_REPO}:latest || {
                                 echo "Failed to pull backend image"
                                 exit 1
                             }
+                            
+                            echo "Pulling frontend image: ${ECR_FRONTEND_REPO}:latest"
                             docker pull ${ECR_FRONTEND_REPO}:latest || {
                                 echo "Failed to pull frontend image"
+                                exit 1
+                            }
+                            
+                            # Verify images exist
+                            echo "Verifying images..."
+                            docker image ls | grep -E "(backend|frontend)" || {
+                                echo "Images not found after pull!"
                                 exit 1
                             }
                             
