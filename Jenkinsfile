@@ -209,7 +209,7 @@ ENVEOF
                             
                             # Verify images exist
                             echo "Verifying images..."
-                            docker image ls | grep -E "(backend|frontend)" || {
+                            docker image ls | grep -E 'backend|frontend' || {
                                 echo "Images not found after pull!"
                                 exit 1
                             }
