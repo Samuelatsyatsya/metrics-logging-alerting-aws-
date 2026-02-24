@@ -156,30 +156,35 @@ pipeline {
                             
                             # Create .env file from Jenkins credentials
                             cat > .env << 'ENVEOF'
-        # Database Configuration
-        MYSQL_PORT=3306
-        MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-        MYSQL_DATABASE=rock_paper_scissors
-        MYSQL_USER=rps_user
-        MYSQL_PASSWORD=${MYSQL_PASSWORD}
+# Database Configuration
+MYSQL_PORT=${MYSQL_PORT}
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+MYSQL_DATABASE=${MYSQL_DATABASE}
+MYSQL_USER=${MYSQL_USER}
+MYSQL_PASSWORD=${MYSQL_PASSWORD}
 
-        # Backend Configuration
-        BACKEND_IMAGE=${ECR_BACKEND_REPO}:latest
-        BACKEND_PORT=${BACKEND_PORT}
-        NODE_ENV=production
-        DB_HOST=mysql
-        DB_PORT=3306
+# Backend Configuration
+BACKEND_IMAGE=${ECR_BACKEND_REPO}:latest
+BACKEND_PORT=${BACKEND_PORT}
+NODE_ENV=${NODE_ENV}
+DB_HOST=${DB_HOST}
+DB_PORT=${MYSQL_PORT}
 
-        # Frontend Configuration
-        FRONTEND_IMAGE=${ECR_FRONTEND_REPO}:latest
-        FRONTEND_PORT=${FRONTEND_PORT}
-        VITE_API_URL=${VITE_API_URL}
-        ENVEOF
+# Frontend Configuration
+FRONTEND_IMAGE=${ECR_FRONTEND_REPO}:latest
+FRONTEND_PORT=${FRONTEND_PORT}
+VITE_API_URL=${VITE_API_URL}
+ENVEOF
                             
                             # Secure the .env file
                             chmod 600 .env
                             
-                            # Login to ECR (IAM role provides credentials automatically)
+                            # Configure AWS CLI on EC2
+                            aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}
+                            aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}
+                            aws configure set region ${AWS_REGION}
+                            
+                            # Login to ECR
                             aws ecr get-login-password --region ${AWS_REGION} | \
                             docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*}
                             
@@ -200,7 +205,6 @@ pipeline {
                 }
             }
         }
-
         
         stage('Health Check') {
             steps {
