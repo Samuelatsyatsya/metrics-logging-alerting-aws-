@@ -28,6 +28,7 @@ pipeline {
         FRONTEND_PORT = credentials('FRONTEND_PORT')
         DB_HOST = credentials('DB_HOST')
         DB_PORT = credentials('DB_PORT')
+        DB_DIALECT = credentials('DB_DIALECT')
 
         // Node environment
         NODE_ENV = credentials('NODE_ENV')
@@ -172,6 +173,7 @@ BACKEND_PORT=''' + env.BACKEND_PORT + '''
 NODE_ENV=''' + env.NODE_ENV + '''
 DB_HOST=''' + env.DB_HOST + '''
 DB_PORT=''' + env.MYSQL_PORT + '''
+DB_DIALECT=''' + env.DB_DIALECT + '''
 
 # Frontend Configuration
 FRONTEND_IMAGE=''' + env.ECR_FRONTEND_REPO + ''':latest
