@@ -89,8 +89,14 @@ pipeline {
                                 sudo chmod +x /usr/local/bin/docker-compose
                             fi
                             
-                            # Install unzip if not exists
+                            # Wait for apt lock to be released and install unzip
                             if ! command -v unzip &> /dev/null; then
+                                echo 'Waiting for apt lock...'
+                                while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+                                    echo 'Waiting for other apt process to finish...'
+                                    sleep 5
+                                done
+                                
                                 echo 'Installing unzip...'
                                 sudo apt-get update -qq
                                 sudo apt-get install -y -qq unzip
@@ -118,6 +124,7 @@ pipeline {
                 }
             }
         }
+
         
         stage('Deploy to EC2') {
             steps {
