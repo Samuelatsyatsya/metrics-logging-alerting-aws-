@@ -28,6 +28,7 @@ pipeline {
         FRONTEND_PORT = credentials('FRONTEND_PORT')
         DB_HOST = credentials('DB_HOST')
         DB_PORT = credentials('DB_PORT')
+        DB_DIALECT = credentials('DB_DIALECT')
 
         // Node environment
         NODE_ENV = credentials('NODE_ENV')
@@ -172,6 +173,7 @@ BACKEND_PORT=''' + env.BACKEND_PORT + '''
 NODE_ENV=''' + env.NODE_ENV + '''
 DB_HOST=''' + env.DB_HOST + '''
 DB_PORT=''' + env.MYSQL_PORT + '''
+DB_DIALECT=''' + env.DB_DIALECT + '''
 
 # Frontend Configuration
 FRONTEND_IMAGE=''' + env.ECR_FRONTEND_REPO + ''':latest
@@ -245,16 +247,24 @@ ENVEOF
             steps {
                 script {
                     sh '''
-                        sleep 15
+                        sleep 30
                         ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} '
                             BACKEND_PORT=''' + env.BACKEND_PORT + '''
                             FRONTEND_PORT=''' + env.FRONTEND_PORT + '''
                             
+                            echo "Checking container status..."
+                            docker ps
+                            
+                            echo "Checking if ports are listening..."
+                            netstat -tlnp || ss -tlnp
+                            
                             # Check backend health
-                            if curl -f http://localhost:${BACKEND_PORT}/health; then
+                            echo "Attempting to connect to backend at port ${BACKEND_PORT}..."
+                            if curl -v -f http://localhost:${BACKEND_PORT}/health; then
                                 echo "Backend is healthy"
                             else
-                                echo "Backend health check failed"
+                                echo "Backend health check failed - checking logs..."
+                                docker logs rps-app_rps-backend | tail -20
                                 exit 1
                             fi
                             
