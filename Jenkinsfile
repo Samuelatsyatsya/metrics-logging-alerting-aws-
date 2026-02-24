@@ -214,11 +214,8 @@ ENVEOF
                                 exit 1
                             }
                             
-                            # Stop old containers and remove volumes
-                            docker compose down -v || true
-                            
-                            # Force remove any remaining containers with the same names
-                            docker rm -f rps-mysql rps-backend rps-frontend 2>/dev/null || true
+                            # Stop and remove all containers managed by compose
+                            docker compose rm -f || true
                             
                             # Remove the existing network
                             docker network rm rps-app_app-network 2>/dev/null || true
