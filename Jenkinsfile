@@ -46,7 +46,11 @@ pipeline {
                     '''
                     
                     sh '''
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*}
+                        ECR_REGISTRY=${ECR_BACKEND_REPO%/*}
+                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY} || {
+                            echo "ECR login failed!"
+                            exit 1
+                        }
                     '''
                     
                     sh '''
@@ -110,6 +114,16 @@ pipeline {
                                 unzip -q awscliv2.zip
                                 sudo ./aws/install
                                 rm -rf aws awscliv2.zip
+                            fi
+                            
+                            # Setup credential helper for Docker
+                            if ! command -v pass &> /dev/null; then
+                                echo 'Installing docker-credential-pass...'
+                                sudo apt-get update -qq
+                                sudo apt-get install -y -qq pass docker.io
+                                mkdir -p ~/.docker
+                                echo '{"credsStore":"pass"}' > ~/.docker/config.json
+                                chmod 600 ~/.docker/config.json
                             fi
                             
                             mkdir -p /home/ubuntu/rock-paper-scissors
@@ -176,21 +190,24 @@ ENDSSH
                     sh '''
                         sleep 15
                         ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} '
-                            if curl -f http://localhost:5000/health; then
+                            BACKEND_PORT=''' + env.BACKEND_PORT + '''
+                            FRONTEND_PORT=''' + env.FRONTEND_PORT + '''
+                            
+                            if curl -f http://localhost:${BACKEND_PORT}/health; then
                                 echo "Backend is healthy"
                             else
                                 echo "Backend health check failed"
                                 exit 1
                             fi
                             
-                            if curl -f http://localhost:80; then
+                            if curl -f http://localhost:${FRONTEND_PORT}; then
                                 echo "Frontend is healthy"
                             else
                                 echo "Frontend health check failed"
                                 exit 1
                             fi
                             
-                            if curl -f http://localhost:5000/metrics; then
+                            if curl -f http://localhost:${BACKEND_PORT}/metrics; then
                                 echo "Metrics endpoint is healthy"
                             else
                                 echo "Metrics endpoint check failed"
@@ -207,8 +224,8 @@ ENDSSH
         success {
             echo 'Pipeline succeeded!'
             echo "Application deployed to: http://${EC2_HOST}"
-            echo "Backend API: http://${EC2_HOST}:5000"
-            echo "Metrics: http://${EC2_HOST}:5000/metrics"
+            echo "Backend API: http://${EC2_HOST}:${BACKEND_PORT}"
+            echo "Metrics: http://${EC2_HOST}:${BACKEND_PORT}/metrics"
         }
         failure {
             echo 'Pipeline failed!'
