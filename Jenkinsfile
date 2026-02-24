@@ -78,7 +78,7 @@ pipeline {
                                 echo 'Installing Docker...'
                                 curl -fsSL https://get.docker.com -o get-docker.sh
                                 sudo sh get-docker.sh
-                                sudo usermod -aG docker \${USER}
+                                sudo usermod -aG docker ubuntu
                                 rm -f get-docker.sh
                             fi
                             
@@ -87,6 +87,13 @@ pipeline {
                                 echo 'Installing Docker Compose...'
                                 sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m) -o /usr/local/bin/docker-compose
                                 sudo chmod +x /usr/local/bin/docker-compose
+                            fi
+                            
+                            # Install unzip if not exists
+                            if ! command -v unzip &> /dev/null; then
+                                echo 'Installing unzip...'
+                                sudo apt-get update -qq
+                                sudo apt-get install -y -qq unzip
                             fi
                             
                             # Install AWS CLI v2 if not exists
@@ -100,7 +107,7 @@ pipeline {
                             fi
                             
                             # Create app directory
-                            mkdir -p /home/\${USER}/rock-paper-scissors
+                            mkdir -p /home/ubuntu/rock-paper-scissors
                             
                             echo 'Setup complete'
                             docker --version
