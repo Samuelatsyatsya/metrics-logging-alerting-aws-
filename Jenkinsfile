@@ -68,14 +68,46 @@ pipeline {
             }
         }
         
+        stage('Setup EC2') {
+            steps {
+                script {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} '
+                            # Install Docker if not exists
+                            if ! command -v docker &> /dev/null; then
+                                echo "Installing Docker..."
+                                curl -fsSL https://get.docker.com -o get-docker.sh
+                                sudo sh get-docker.sh
+                                sudo usermod -aG docker ${USER}
+                                rm get-docker.sh
+                            fi
+                            
+                            # Install Docker Compose if not exists
+                            if ! command -v docker-compose &> /dev/null; then
+                                echo "Installing Docker Compose..."
+                                sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+                                sudo chmod +x /usr/local/bin/docker-compose
+                            fi
+                            
+                            # Install AWS CLI if not exists
+                            if ! command -v aws &> /dev/null; then
+                                echo "Installing AWS CLI..."
+                                sudo apt-get update
+                                sudo apt-get install -y awscli
+                            fi
+                            
+                            # Create app directory
+                            mkdir -p /home/${USER}/rock-paper-scissors
+                        '
+                    '''
+                }
+            }
+        }
+        
         stage('Deploy to EC2') {
             steps {
                 script {
                     sh '''
-                        # Create directory on EC2 if it doesn't exist
-                        ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} \
-                            "mkdir -p /home/${EC2_USER}/rock-paper-scissors"
-                        
                         # Copy docker-compose file to EC2
                         scp -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} \
                             docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/rock-paper-scissors/
@@ -88,33 +120,33 @@ pipeline {
                     '''
                     
                     sh '''
-                        ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} '
+                        ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} "
                             cd /home/${EC2_USER}/rock-paper-scissors
                             
                             # Configure AWS CLI on EC2
-                            aws configure set aws_access_key_id '${AWS_ACCESS_KEY_ID}'
-                            aws configure set aws_secret_access_key '${AWS_SECRET_ACCESS_KEY}'
-                            aws configure set region '${AWS_REGION}'
+                            aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}
+                            aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}
+                            aws configure set region ${AWS_REGION}
                             
                             # Login to ECR
-                            aws ecr get-login-password --region '${AWS_REGION}' | \
-                            docker login --username AWS --password-stdin '${ECR_BACKEND_REPO%/*}'
+                            aws ecr get-login-password --region ${AWS_REGION} | \
+                            docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*}
                             
                             # Pull latest images
-                            docker pull '${ECR_BACKEND_REPO}':latest
-                            docker pull '${ECR_FRONTEND_REPO}':latest
+                            docker pull ${ECR_BACKEND_REPO}:latest
+                            docker pull ${ECR_FRONTEND_REPO}:latest
                             
                             # Stop old containers
                             docker compose down || true
                             
                             # Start new containers with environment variables
-                            export BACKEND_IMAGE='${ECR_BACKEND_REPO}':latest
-                            export FRONTEND_IMAGE='${ECR_FRONTEND_REPO}':latest
+                            export BACKEND_IMAGE=${ECR_BACKEND_REPO}:latest
+                            export FRONTEND_IMAGE=${ECR_FRONTEND_REPO}:latest
                             docker compose up -d
                             
                             # Clean up old images
                             docker image prune -af
-                        '
+                        "
                     '''
                 }
             }
