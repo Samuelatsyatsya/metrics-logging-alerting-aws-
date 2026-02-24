@@ -19,10 +19,18 @@ pipeline {
         // Database credentials
         MYSQL_ROOT_PASSWORD = credentials('MYSQL_ROOT_PASSWORD')
         MYSQL_PASSWORD = credentials('MYSQL_PASSWORD')
+        MYSQL_DATABASE = credentials('MYSQL_DATABASE')
+        MYSQL_PORT = credentials('MYSQL_PORT')
+        MYSQL_USER = credentials('MYSQL_USER')
         
         // Port configurations
         BACKEND_PORT = credentials('BACKEND_PORT')
         FRONTEND_PORT = credentials('FRONTEND_PORT')
+        DB_HOST = credentials('DB_HOST')
+        DB_PORT = credentials('DB_PORT')
+
+        // Node environment
+        NODE_ENV = credentials('NODE_ENV')
     }
     
     stages {
@@ -142,33 +150,36 @@ pipeline {
                             docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/rock-paper-scissors/
                     '''
                     
-                    sh """
-                        ssh -o StrictHostKeyChecking=no -i \${SSH_PRIVATE_KEY} \${EC2_USER}@\${EC2_HOST} '
-                            cd /home/ubuntu/rock-paper-scissors
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} "
+                            cd /home/${EC2_USER}/rock-paper-scissors
                             
                             # Create .env file from Jenkins credentials
-                            cat > .env << EOF
-MYSQL_PORT=3306
-MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-MYSQL_DATABASE=rock_paper_scissors
-MYSQL_USER=rps_user
-MYSQL_PASSWORD=${MYSQL_PASSWORD}
+                            cat > .env << 'ENVEOF'
+        # Database Configuration
+        MYSQL_PORT=3306
+        MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+        MYSQL_DATABASE=rock_paper_scissors
+        MYSQL_USER=rps_user
+        MYSQL_PASSWORD=${MYSQL_PASSWORD}
 
-BACKEND_IMAGE=${ECR_BACKEND_REPO}:latest
-BACKEND_PORT=${BACKEND_PORT}
-NODE_ENV=production
-DB_HOST=mysql
-DB_PORT=3306
+        # Backend Configuration
+        BACKEND_IMAGE=${ECR_BACKEND_REPO}:latest
+        BACKEND_PORT=${BACKEND_PORT}
+        NODE_ENV=production
+        DB_HOST=mysql
+        DB_PORT=3306
 
-FRONTEND_IMAGE=${ECR_FRONTEND_REPO}:latest
-FRONTEND_PORT=${FRONTEND_PORT}
-VITE_API_URL=${VITE_API_URL}
-EOF
+        # Frontend Configuration
+        FRONTEND_IMAGE=${ECR_FRONTEND_REPO}:latest
+        FRONTEND_PORT=${FRONTEND_PORT}
+        VITE_API_URL=${VITE_API_URL}
+        ENVEOF
                             
                             # Secure the .env file
                             chmod 600 .env
                             
-                            # Login to ECR
+                            # Login to ECR (IAM role provides credentials automatically)
                             aws ecr get-login-password --region ${AWS_REGION} | \
                             docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*}
                             
@@ -184,11 +195,12 @@ EOF
                             
                             # Clean up old images
                             docker image prune -af
-                        '
-                    """
+                        "
+                    '''
                 }
             }
         }
+
         
         stage('Health Check') {
             steps {
@@ -205,7 +217,7 @@ EOF
                             fi
                             
                             # Check frontend
-                            if curl -f http://localhost:80; then
+                            if curl -f http://localhost:5173; then
                                 echo "Frontend is healthy"
                             else
                                 echo "Frontend health check failed"
