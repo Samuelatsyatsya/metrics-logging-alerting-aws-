@@ -198,8 +198,11 @@ ENVEOF
                             docker pull ${ECR_BACKEND_REPO}:latest
                             docker pull ${ECR_FRONTEND_REPO}:latest
                             
-                            # Stop old containers
-                            docker compose down || true
+                            # Stop old containers and remove volumes
+                            docker compose down -v || true
+                            
+                            # Force remove any remaining containers with the same names
+                            docker rm -f rps-mysql rps-backend rps-frontend 2>/dev/null || true
                             
                             # Start new containers
                             docker compose up -d
