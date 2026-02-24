@@ -13,7 +13,7 @@ pipeline {
         ECR_FRONTEND_REPO = credentials('ECR_FRONTEND_REPO')
         VITE_API_URL = credentials('VITE_API_URL')
         EC2_HOST = credentials('EC2_HOST')
-        SSH_PRIVATE_KEY = credentials('monitoring-iac-keypair.pem')
+        SSH_PRIVATE_KEY = credentials('SSH_PRIVATE_KEY')
         EC2_USER = credentials('EC2_USER')
     }
     
