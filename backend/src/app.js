@@ -5,11 +5,10 @@ import rateLimit from 'express-rate-limit';
 import gameRoutes from './routes/game.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { HTTP_STATUS } from './config/constants.js';
+import { metricsMiddleware } from './middleware/metricsMiddleware.js';
+import { register } from './utils/metrics.js';
 
 const app = express();
-
-// Trust proxy (nginx)
-app.set('trust proxy', true);
 
 // Security middleware
 app.use(helmet());
@@ -23,9 +22,6 @@ app.use(cors({
   preflightContinue: false,
   optionsSuccessStatus: 204
 }));
-
-// Handle preflight requests for all routes
-app.options('*', cors());
 
 // Rate limiting
 const limiter = rateLimit({
@@ -41,6 +37,15 @@ app.use('/api/v1', limiter);
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Metrics middleware (before routes)
+app.use(metricsMiddleware);
+
+// Prometheus metrics endpoint
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
 
 // Health check endpoint
 app.get('/health', (req, res) => {

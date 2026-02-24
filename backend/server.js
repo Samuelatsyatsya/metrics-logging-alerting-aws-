@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import { testConnection, sequelize } from './src/config/db.js';
 import app from './src/app.js';
+import { startMetricsUpdater } from './src/utils/metricsUpdater.js';
 
 // Load environment variables
 dotenv.config();
@@ -31,9 +32,14 @@ Server is running!
 Environment: ${process.env.NODE_ENV}
 Host: http://${HOST}:${PORT}
 Health: http://${HOST}:${PORT}/health
+Metrics: http://${HOST}:${PORT}/metrics
 API: http://${HOST}:${PORT}${process.env.API_PREFIX || '/api/v1'}
 Database: ${process.env.DB_NAME}@${process.env.DB_HOST}:${process.env.DB_PORT}
       `);
+      
+      // Start metrics updater after server is running
+      startMetricsUpdater();
+      console.log('Metrics updater started');
     });
   } catch (error) {
     console.error('Failed to start server:', error);
@@ -49,6 +55,19 @@ process.on('uncaughtException', (error) => {
 
 process.on('unhandledRejection', (error) => {
   console.error('Unhandled Rejection:', error);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  await sequelize.close();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully');
+  await sequelize.close();
+  process.exit(0);
 });
 
 startServer();
