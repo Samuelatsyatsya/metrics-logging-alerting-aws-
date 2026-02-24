@@ -214,6 +214,9 @@ ENVEOF
                                 exit 1
                             }
                             
+                            echo ".env file contents:"
+                            cat .env
+                            
                             # Stop and remove all containers managed by compose
                             docker compose rm -f || true
                             
@@ -221,10 +224,14 @@ ENVEOF
                             docker network rm rps-app_app-network 2>/dev/null || true
                             
                             # Wait a moment for cleanup
-                            sleep 3
+                            sleep 5
                             
-                            # Start new containers
-                            docker compose up -d
+                            # Verify images one more time before compose up
+                            echo "Images available before docker compose up:"
+                            docker image ls
+                            
+                            # Start new containers with verbose output
+                            docker compose up -d --no-color
                             
                             # Clean up old images
                             docker image prune -af
