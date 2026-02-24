@@ -16,7 +16,6 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
@@ -27,16 +26,14 @@ services:
 
   # Express backend
   backend:
-    build: ./backend
+    image: ${BACKEND_IMAGE}
     container_name: rps-backend
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT}:${BACKEND_PORT}"
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
     environment:
       NODE_ENV: ${NODE_ENV}
+      PORT: ${BACKEND_PORT}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_USER: ${MYSQL_USER}
@@ -50,19 +47,13 @@ services:
 
   # React frontend
   frontend:
-    build:
-      context: ./frontend
-      target: ${NODE_ENV}
+    image: ${FRONTEND_IMAGE}
     container_name: rps-frontend
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     environment:
       VITE_API_URL: ${VITE_API_URL}
-      CHOKIDAR_USEPOLLING: "true"
     depends_on:
       - backend
     networks:
