@@ -1,4 +1,4 @@
-version: "3.9"
+name: rps-app
 
 services:
   # MySQL database
@@ -27,16 +27,14 @@ services:
 
   # Express backend
   backend:
-    build: ./backend
+    image: ${BACKEND_IMAGE}
     container_name: rps-backend
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT}:${BACKEND_PORT}"
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
     environment:
       NODE_ENV: ${NODE_ENV}
+      PORT: ${BACKEND_PORT}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_USER: ${MYSQL_USER}
@@ -50,20 +48,17 @@ services:
 
   # React frontend
   frontend:
-    build:
-      context: ./frontend
-      target: ${NODE_ENV}
+    image: ${FRONTEND_IMAGE}
     container_name: rps-frontend
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
     environment:
       VITE_API_URL: ${VITE_API_URL}
-      CHOKIDAR_USEPOLLING: "true"
     depends_on:
+      - backend
+    networks:
+      - app-network
       - backend
     networks:
       - app-network
