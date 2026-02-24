@@ -7,7 +7,6 @@ pipeline {
     
     environment {
         AWS_REGION = credentials('AWS_REGION')
-        DB_SECRET_NAME = credentials('DB_SECRET_NAME')
         AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
         ECR_BACKEND_REPO = credentials('ECR_BACKEND_REPO')
@@ -93,37 +92,6 @@ pipeline {
                         docker push "${ECR_FRONTEND_REPO}:latest"
                     '''
                     
-                    sh '''
-                        . venv/bin/activate
-                        pip install ansible boto3 botocore
-                        ansible-galaxy collection install community.aws community.docker
-                    '''
-                    
-                    sh '''
-                        mkdir -p ~/.ssh
-                        echo "${SSH_PRIVATE_KEY}" > ~/.ssh/rps-game-keypair.pem
-                        chmod 600 ~/.ssh/rps-game-keypair.pem
-                    '''
-                    
-                    sh '''
-                        cat > ssh_wrapper.sh << 'EOF'
-#!/bin/bash
-ssh -i ~/.ssh/rps-game-keypair.pem -o StrictHostKeyChecking=no -o ProxyCommand="ssh -i ~/.ssh/rps-game-keypair.pem -W %h:%p ubuntu@${BASTION_HOST}" "$@"
-EOF
-                        chmod +x ssh_wrapper.sh
-                    '''
-                    
-                    sh '''
-                        echo "Testing bastion connection..."
-                        ssh -i ~/.ssh/rps-game-keypair.pem -o StrictHostKeyChecking=no "ubuntu@${BASTION_HOST}" "echo 'Bastion connection successful'"
-                    '''
-                    
-                    sh '''
-                        . venv/bin/activate
-                        cd ansible
-                        export ANSIBLE_SSH_EXECUTABLE=../ssh_wrapper.sh
-                        ansible-playbook playbooks/site.yml -i inventory/aws_ec2.yml
-                    '''
                 }
             }
         }
