@@ -16,10 +16,21 @@ pipeline {
         SSH_PRIVATE_KEY = credentials('SSH_PRIVATE_KEY')
         EC2_USER = credentials('EC2_USER')
         
+        // Database credentials
         MYSQL_ROOT_PASSWORD = credentials('MYSQL_ROOT_PASSWORD')
         MYSQL_PASSWORD = credentials('MYSQL_PASSWORD')
+        MYSQL_DATABASE = credentials('MYSQL_DATABASE')
+        MYSQL_PORT = credentials('MYSQL_PORT')
+        MYSQL_USER = credentials('MYSQL_USER')
+        
+        // Port configurations
         BACKEND_PORT = credentials('BACKEND_PORT')
         FRONTEND_PORT = credentials('FRONTEND_PORT')
+        DB_HOST = credentials('DB_HOST')
+        DB_PORT = credentials('DB_PORT')
+
+        // Node environment
+        NODE_ENV = credentials('NODE_ENV')
     }
     
     stages {
@@ -46,11 +57,7 @@ pipeline {
                     '''
                     
                     sh '''
-                        ECR_REGISTRY=${ECR_BACKEND_REPO%/*}
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY} || {
-                            echo "ECR login failed!"
-                            exit 1
-                        }
+                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*}
                     '''
                     
                     sh '''
@@ -82,6 +89,7 @@ pipeline {
                 script {
                     sh '''
                         ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} "
+                            # Install Docker if not exists
                             if ! command -v docker &> /dev/null; then
                                 echo 'Installing Docker...'
                                 curl -fsSL https://get.docker.com -o get-docker.sh
@@ -90,15 +98,18 @@ pipeline {
                                 rm -f get-docker.sh
                             fi
                             
+                            # Install Docker Compose if not exists
                             if ! command -v docker-compose &> /dev/null; then
                                 echo 'Installing Docker Compose...'
-                                sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-\\$(uname -s)-\\$(uname -m) -o /usr/local/bin/docker-compose
+                                sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m) -o /usr/local/bin/docker-compose
                                 sudo chmod +x /usr/local/bin/docker-compose
                             fi
                             
+                            # Wait for apt lock to be released and install unzip
                             if ! command -v unzip &> /dev/null; then
                                 echo 'Waiting for apt lock...'
                                 while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+                                    echo 'Waiting for other apt process to finish...'
                                     sleep 5
                                 done
                                 
@@ -107,6 +118,7 @@ pipeline {
                                 sudo apt-get install -y -qq unzip
                             fi
                             
+                            # Install AWS CLI v2 if not exists
                             if ! command -v aws &> /dev/null; then
                                 echo 'Installing AWS CLI v2...'
                                 cd /tmp
@@ -116,16 +128,7 @@ pipeline {
                                 rm -rf aws awscliv2.zip
                             fi
                             
-                            # Setup credential helper for Docker
-                            if ! command -v pass &> /dev/null; then
-                                echo 'Installing docker-credential-pass...'
-                                sudo apt-get update -qq
-                                sudo apt-get install -y -qq pass docker.io
-                                mkdir -p ~/.docker
-                                echo '{"credsStore":"pass"}' > ~/.docker/config.json
-                                chmod 600 ~/.docker/config.json
-                            fi
-                            
+                            # Create app directory
                             mkdir -p /home/ubuntu/rock-paper-scissors
                             
                             echo 'Setup complete'
@@ -142,43 +145,62 @@ pipeline {
             steps {
                 script {
                     sh '''
+                        # Copy docker-compose file to EC2
                         scp -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} \
                             docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/rock-paper-scissors/
                     '''
                     
                     sh '''
-                        ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} << 'ENDSSH'
-cd /home/ubuntu/rock-paper-scissors
+                        ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} "
+                            cd /home/${EC2_USER}/rock-paper-scissors
+                            
+                            # Create .env file from Jenkins credentials
+                            cat > .env << 'ENVEOF'
+# Database Configuration
+MYSQL_PORT=${MYSQL_PORT}
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+MYSQL_DATABASE=${MYSQL_DATABASE}
+MYSQL_USER=${MYSQL_USER}
+MYSQL_PASSWORD=${MYSQL_PASSWORD}
 
-cat > .env << 'ENDENV'
-MYSQL_PORT=3306
-MYSQL_ROOT_PASSWORD=''' + env.MYSQL_ROOT_PASSWORD + '''
-MYSQL_DATABASE=rock_paper_scissors
-MYSQL_USER=rps_user
-MYSQL_PASSWORD=''' + env.MYSQL_PASSWORD + '''
+# Backend Configuration
+BACKEND_IMAGE=${ECR_BACKEND_REPO}:latest
+BACKEND_PORT=${BACKEND_PORT}
+NODE_ENV=${NODE_ENV}
+DB_HOST=${DB_HOST}
+DB_PORT=${MYSQL_PORT}
 
-BACKEND_IMAGE=''' + env.ECR_BACKEND_REPO + ''':latest
-BACKEND_PORT=''' + env.BACKEND_PORT + '''
-NODE_ENV=production
-DB_HOST=mysql
-DB_PORT=3306
-
-FRONTEND_IMAGE=''' + env.ECR_FRONTEND_REPO + ''':latest
-FRONTEND_PORT=''' + env.FRONTEND_PORT + '''
-VITE_API_URL=''' + env.VITE_API_URL + '''
-ENDENV
-
-chmod 600 .env
-
-aws ecr get-login-password --region ''' + env.AWS_REGION + ''' | docker login --username AWS --password-stdin ''' + env.ECR_BACKEND_REPO.split('/')[0] + '''
-
-docker pull ''' + env.ECR_BACKEND_REPO + ''':latest
-docker pull ''' + env.ECR_FRONTEND_REPO + ''':latest
-
-docker compose down || true
-docker compose up -d
-docker image prune -af
-ENDSSH
+# Frontend Configuration
+FRONTEND_IMAGE=${ECR_FRONTEND_REPO}:latest
+FRONTEND_PORT=${FRONTEND_PORT}
+VITE_API_URL=${VITE_API_URL}
+ENVEOF
+                            
+                            # Secure the .env file
+                            chmod 600 .env
+                            
+                            # Configure AWS CLI on EC2
+                            aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}
+                            aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}
+                            aws configure set region ${AWS_REGION}
+                            
+                            # Login to ECR
+                            aws ecr get-login-password --region ${AWS_REGION} | \
+                            docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*}
+                            
+                            # Pull latest images
+                            docker pull ${ECR_BACKEND_REPO}:latest
+                            docker pull ${ECR_FRONTEND_REPO}:latest
+                            
+                            # Stop old containers
+                            docker compose down || true
+                            
+                            # Start new containers
+                            docker compose up -d
+                            
+                            # Clean up old images
+                            docker image prune -af
+                        "
                     '''
                 }
             }
@@ -190,24 +212,24 @@ ENDSSH
                     sh '''
                         sleep 15
                         ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} '
-                            BACKEND_PORT=''' + env.BACKEND_PORT + '''
-                            FRONTEND_PORT=''' + env.FRONTEND_PORT + '''
-                            
-                            if curl -f http://localhost:${BACKEND_PORT}/health; then
+                            # Check backend health
+                            if curl -f http://localhost:5000/health; then
                                 echo "Backend is healthy"
                             else
                                 echo "Backend health check failed"
                                 exit 1
                             fi
                             
-                            if curl -f http://localhost:${FRONTEND_PORT}; then
+                            # Check frontend
+                            if curl -f http://localhost:5173; then
                                 echo "Frontend is healthy"
                             else
                                 echo "Frontend health check failed"
                                 exit 1
                             fi
                             
-                            if curl -f http://localhost:${BACKEND_PORT}/metrics; then
+                            # Check metrics endpoint
+                            if curl -f http://localhost:5000/metrics; then
                                 echo "Metrics endpoint is healthy"
                             else
                                 echo "Metrics endpoint check failed"
@@ -224,8 +246,8 @@ ENDSSH
         success {
             echo 'Pipeline succeeded!'
             echo "Application deployed to: http://${EC2_HOST}"
-            echo "Backend API: http://${EC2_HOST}:${BACKEND_PORT}"
-            echo "Metrics: http://${EC2_HOST}:${BACKEND_PORT}/metrics"
+            echo "Backend API: http://${EC2_HOST}:5000"
+            echo "Metrics: http://${EC2_HOST}:5000/metrics"
         }
         failure {
             echo 'Pipeline failed!'
