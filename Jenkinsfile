@@ -74,7 +74,7 @@ pipeline {
                     sh '''
                         # Create directory on EC2 if it doesn't exist
                         ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} \
-                            'mkdir -p /home/${EC2_USER}/rock-paper-scissors'
+                            "mkdir -p /home/${EC2_USER}/rock-paper-scissors"
                         
                         # Copy docker-compose file to EC2
                         scp -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} \
