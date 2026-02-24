@@ -15,6 +15,22 @@ pipeline {
         EC2_HOST = credentials('EC2_HOST')
         SSH_PRIVATE_KEY = credentials('SSH_PRIVATE_KEY')
         EC2_USER = credentials('EC2_USER')
+        
+        // Database credentials
+        MYSQL_ROOT_PASSWORD = credentials('MYSQL_ROOT_PASSWORD')
+        MYSQL_PASSWORD = credentials('MYSQL_PASSWORD')
+        MYSQL_DATABASE = credentials('MYSQL_DATABASE')
+        MYSQL_PORT = credentials('MYSQL_PORT')
+        MYSQL_USER = credentials('MYSQL_USER')
+        
+        // Port configurations
+        BACKEND_PORT = credentials('BACKEND_PORT')
+        FRONTEND_PORT = credentials('FRONTEND_PORT')
+        DB_HOST = credentials('DB_HOST')
+        DB_PORT = credentials('DB_PORT')
+
+        // Node environment
+        NODE_ENV = credentials('NODE_ENV')
     }
     
     stages {
@@ -124,7 +140,6 @@ pipeline {
                 }
             }
         }
-
         
         stage('Deploy to EC2') {
             steps {
@@ -133,17 +148,36 @@ pipeline {
                         # Copy docker-compose file to EC2
                         scp -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} \
                             docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/rock-paper-scissors/
-                        
-                        # Copy .env file if exists
-                        if [ -f .env.production ]; then
-                            scp -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} \
-                                .env.production ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/rock-paper-scissors/.env
-                        fi
                     '''
                     
                     sh '''
                         ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} "
                             cd /home/${EC2_USER}/rock-paper-scissors
+                            
+                            # Create .env file from Jenkins credentials
+                            cat > .env << 'ENVEOF'
+# Database Configuration
+MYSQL_PORT=${MYSQL_PORT}
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+MYSQL_DATABASE=${MYSQL_DATABASE}
+MYSQL_USER=${MYSQL_USER}
+MYSQL_PASSWORD=${MYSQL_PASSWORD}
+
+# Backend Configuration
+BACKEND_IMAGE=${ECR_BACKEND_REPO}:latest
+BACKEND_PORT=${BACKEND_PORT}
+NODE_ENV=${NODE_ENV}
+DB_HOST=${DB_HOST}
+DB_PORT=${MYSQL_PORT}
+
+# Frontend Configuration
+FRONTEND_IMAGE=${ECR_FRONTEND_REPO}:latest
+FRONTEND_PORT=${FRONTEND_PORT}
+VITE_API_URL=${VITE_API_URL}
+ENVEOF
+                            
+                            # Secure the .env file
+                            chmod 600 .env
                             
                             # Configure AWS CLI on EC2
                             aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}
@@ -161,9 +195,7 @@ pipeline {
                             # Stop old containers
                             docker compose down || true
                             
-                            # Start new containers with environment variables
-                            export BACKEND_IMAGE=${ECR_BACKEND_REPO}:latest
-                            export FRONTEND_IMAGE=${ECR_FRONTEND_REPO}:latest
+                            # Start new containers
                             docker compose up -d
                             
                             # Clean up old images
@@ -189,7 +221,7 @@ pipeline {
                             fi
                             
                             # Check frontend
-                            if curl -f http://localhost:80; then
+                            if curl -f http://localhost:5173; then
                                 echo "Frontend is healthy"
                             else
                                 echo "Frontend health check failed"
