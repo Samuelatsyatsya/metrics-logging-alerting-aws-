@@ -59,9 +59,6 @@ services:
       - backend
     networks:
       - app-network
-      - backend
-    networks:
-      - app-network
 
 volumes:
   mysql-data:
