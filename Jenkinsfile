@@ -253,23 +253,36 @@ ENVEOF
                             FRONTEND_PORT=''' + env.FRONTEND_PORT + '''
                             
                             echo "Checking container status..."
-                            docker ps
+                            docker ps -a
+                            
+                            echo "Backend container logs (last 100 lines):"
+                            docker logs rps-backend 2>&1 | tail -100
                             
                             echo "Checking if ports are listening..."
-                            netstat -tlnp || ss -tlnp
+                            ss -tlnp 2>/dev/null || netstat -tlnp
                             
-                            # Check backend health
-                            echo "Attempting to connect to backend at port ${BACKEND_PORT}..."
-                            if curl -v -f http://localhost:${BACKEND_PORT}/health; then
-                                echo "Backend is healthy"
-                            else
-                                echo "Backend health check failed - checking logs..."
-                                docker logs rps-app_rps-backend | tail -20
+                            # Check backend health with retry
+                            MAX_RETRIES=10
+                            RETRY_COUNT=0
+                            until [ $RETRY_COUNT -ge $MAX_RETRIES ]; do
+                                echo "Health check attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+                                if curl -f http://localhost:${BACKEND_PORT}/health 2>/dev/null; then
+                                    echo "Backend is healthy"
+                                    break
+                                fi
+                                RETRY_COUNT=$((RETRY_COUNT + 1))
+                                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                                    sleep 5
+                                fi
+                            done
+                            
+                            if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+                                echo "Backend health check failed after $MAX_RETRIES attempts"
                                 exit 1
                             fi
                             
                             # Check frontend
-                            if curl -f http://localhost:${FRONTEND_PORT}; then
+                            if curl -f http://localhost:${FRONTEND_PORT} 2>/dev/null; then
                                 echo "Frontend is healthy"
                             else
                                 echo "Frontend health check failed"
@@ -277,7 +290,7 @@ ENVEOF
                             fi
                             
                             # Check metrics endpoint
-                            if curl -f http://localhost:${BACKEND_PORT}/metrics; then
+                            if curl -f http://localhost:${BACKEND_PORT}/metrics 2>/dev/null; then
                                 echo "Metrics endpoint is healthy"
                             else
                                 echo "Metrics endpoint check failed"
