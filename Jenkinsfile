@@ -57,7 +57,10 @@ pipeline {
                     '''
                     
                     sh '''
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*}
+                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*} || {
+                            echo "ECR login failed!"
+                            exit 1
+                        }
                     '''
                     
                     sh '''
@@ -157,23 +160,23 @@ pipeline {
                             # Create .env file from Jenkins credentials
                             cat > .env << 'ENVEOF'
 # Database Configuration
-MYSQL_PORT=${MYSQL_PORT}
-MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-MYSQL_DATABASE=${MYSQL_DATABASE}
-MYSQL_USER=${MYSQL_USER}
-MYSQL_PASSWORD=${MYSQL_PASSWORD}
+MYSQL_PORT=''' + env.MYSQL_PORT + '''
+MYSQL_ROOT_PASSWORD=''' + env.MYSQL_ROOT_PASSWORD + '''
+MYSQL_DATABASE=''' + env.MYSQL_DATABASE + '''
+MYSQL_USER=''' + env.MYSQL_USER + '''
+MYSQL_PASSWORD=''' + env.MYSQL_PASSWORD + '''
 
 # Backend Configuration
-BACKEND_IMAGE=${ECR_BACKEND_REPO}:latest
-BACKEND_PORT=${BACKEND_PORT}
-NODE_ENV=${NODE_ENV}
-DB_HOST=${DB_HOST}
-DB_PORT=${MYSQL_PORT}
+BACKEND_IMAGE=''' + env.ECR_BACKEND_REPO + ''':latest
+BACKEND_PORT=''' + env.BACKEND_PORT + '''
+NODE_ENV=''' + env.NODE_ENV + '''
+DB_HOST=''' + env.DB_HOST + '''
+DB_PORT=''' + env.MYSQL_PORT + '''
 
 # Frontend Configuration
-FRONTEND_IMAGE=${ECR_FRONTEND_REPO}:latest
-FRONTEND_PORT=${FRONTEND_PORT}
-VITE_API_URL=${VITE_API_URL}
+FRONTEND_IMAGE=''' + env.ECR_FRONTEND_REPO + ''':latest
+FRONTEND_PORT=''' + env.FRONTEND_PORT + '''
+VITE_API_URL=''' + env.VITE_API_URL + '''
 ENVEOF
                             
                             # Secure the .env file
@@ -186,7 +189,10 @@ ENVEOF
                             
                             # Login to ECR
                             aws ecr get-login-password --region ${AWS_REGION} | \
-                            docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*}
+                            docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*} || {
+                                echo "ECR login on EC2 failed!"
+                                exit 1
+                            }
                             
                             # Pull latest images
                             docker pull ${ECR_BACKEND_REPO}:latest
@@ -212,8 +218,11 @@ ENVEOF
                     sh '''
                         sleep 15
                         ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} '
+                            BACKEND_PORT=''' + env.BACKEND_PORT + '''
+                            FRONTEND_PORT=''' + env.FRONTEND_PORT + '''
+                            
                             # Check backend health
-                            if curl -f http://localhost:5000/health; then
+                            if curl -f http://localhost:${BACKEND_PORT}/health; then
                                 echo "Backend is healthy"
                             else
                                 echo "Backend health check failed"
@@ -221,7 +230,7 @@ ENVEOF
                             fi
                             
                             # Check frontend
-                            if curl -f http://localhost:5173; then
+                            if curl -f http://localhost:${FRONTEND_PORT}; then
                                 echo "Frontend is healthy"
                             else
                                 echo "Frontend health check failed"
@@ -229,7 +238,7 @@ ENVEOF
                             fi
                             
                             # Check metrics endpoint
-                            if curl -f http://localhost:5000/metrics; then
+                            if curl -f http://localhost:${BACKEND_PORT}/metrics; then
                                 echo "Metrics endpoint is healthy"
                             else
                                 echo "Metrics endpoint check failed"
@@ -246,8 +255,8 @@ ENVEOF
         success {
             echo 'Pipeline succeeded!'
             echo "Application deployed to: http://${EC2_HOST}"
-            echo "Backend API: http://${EC2_HOST}:5000"
-            echo "Metrics: http://${EC2_HOST}:5000/metrics"
+            echo "Backend API: http://${EC2_HOST}:${BACKEND_PORT}"
+            echo "Metrics: http://${EC2_HOST}:${BACKEND_PORT}/metrics"
         }
         failure {
             echo 'Pipeline failed!'
