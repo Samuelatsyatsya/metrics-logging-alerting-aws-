@@ -1,28 +1,32 @@
-import dotenv from 'dotenv';
-import { testConnection, sequelize } from './src/config/db.js';
-import app from './src/app.js';
-import { startMetricsUpdater } from './src/utils/metricsUpdater.js';
+import dotenv from "dotenv";
+import { testConnection, sequelize } from "./src/config/db.js";
+import app from "./src/app.js";
+import { startMetricsUpdater } from "./src/utils/metricsUpdater.js";
 
 // Load environment variables
 dotenv.config();
 
 const PORT = process.env.PORT || 5000;
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || "0.0.0.0";
 
 async function startServer() {
   try {
     // Test database connection
     const dbConnected = await testConnection();
-    
+
     if (!dbConnected) {
-      console.error('Failed to connect to database. Exiting...');
+      console.error("Failed to connect to database. Exiting...");
       process.exit(1);
     }
 
     // Sync database models
-    if (process.env.NODE_ENV === 'development') {
+    if (process.env.NODE_ENV === "development") {
       await sequelize.sync({ alter: true });
-      console.log('Database models synchronized');
+      console.log("Database models synchronized");
+    } else if (process.env.NODE_ENV === "production") {
+      // On first deployment, create tables if they don't exist
+      await sequelize.sync({ alter: false });
+      console.log("Database models synchronized (production)");
     }
 
     // Start server
@@ -33,39 +37,39 @@ Environment: ${process.env.NODE_ENV}
 Host: http://${HOST}:${PORT}
 Health: http://${HOST}:${PORT}/health
 Metrics: http://${HOST}:${PORT}/metrics
-API: http://${HOST}:${PORT}${process.env.API_PREFIX || '/api/v1'}
+API: http://${HOST}:${PORT}${process.env.API_PREFIX || "/api/v1"}
 Database: ${process.env.DB_NAME}@${process.env.DB_HOST}:${process.env.DB_PORT}
       `);
-      
+
       // Start metrics updater after server is running
       startMetricsUpdater();
-      console.log('Metrics updater started');
+      console.log("Metrics updater started");
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error("Failed to start server:", error);
     process.exit(1);
   }
 }
 
 // Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
   process.exit(1);
 });
 
-process.on('unhandledRejection', (error) => {
-  console.error('Unhandled Rejection:', error);
+process.on("unhandledRejection", (error) => {
+  console.error("Unhandled Rejection:", error);
 });
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully');
+process.on("SIGTERM", async () => {
+  console.log("SIGTERM received, shutting down gracefully");
   await sequelize.close();
   process.exit(0);
 });
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully');
+process.on("SIGINT", async () => {
+  console.log("SIGINT received, shutting down gracefully");
   await sequelize.close();
   process.exit(0);
 });
