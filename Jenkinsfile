@@ -54,34 +54,39 @@ pipeline {
                     sh '''
                         # Check if docker socket exists
                         if [ ! -S /var/run/docker.sock ]; then
-                            echo "Docker socket not found at /var/run/docker.sock"
-                            echo "Skipping docker setup - Jenkins may be running without docker socket mount"
+                            echo "WARNING: Docker socket not found at /var/run/docker.sock"
+                            echo "Jenkins may be running without docker socket mount"
                             exit 0
                         fi
                         
                         # Try to access docker
                         if docker ps > /dev/null 2>&1; then
-                            echo "Docker is already accessible"
+                            echo "Docker is accessible"
                             docker --version
                             exit 0
                         fi
                         
-                        # If we get here, docker socket exists but not accessible
-                        echo "Docker socket exists but not accessible"
+                        # Docker socket exists but not accessible to jenkins user
+                        echo "WARNING: Docker socket exists but not accessible to jenkins user"
+                        echo "Attempting to fix permissions..."
                         
-                        # Try to fix permissions without sudo
-                        chmod 666 /var/run/docker.sock 2>/dev/null && {
+                        # Try to fix permissions
+                        if chmod 666 /var/run/docker.sock 2>/dev/null; then
                             echo "Fixed docker socket permissions"
-                            docker --version
-                            echo "Docker setup complete"
-                            exit 0
-                        }
+                        else
+                            echo "WARNING: Could not fix docker socket permissions (may need sudo on host)"
+                        fi
                         
-                        # If we can't fix it, fail gracefully with instructions
-                        echo "Unable to access Docker daemon"
-                        echo "Please ensure Jenkins container has Docker socket mounted:"
-                        echo "  docker run -v /var/run/docker.sock:/var/run/docker.sock ..."
-                        exit 1
+                        # Try again
+                        if docker ps > /dev/null 2>&1; then
+                            echo "Docker is now accessible"
+                            docker --version
+                            exit 0
+                        else
+                            echo "WARNING: Docker still not accessible, continuing anyway"
+                            echo "Build stage will fail if Docker is required"
+                            exit 0
+                        fi
                     '''
                 }
             }
@@ -90,6 +95,17 @@ pipeline {
         stage('Build and Push Images') {
             steps {
                 script {
+                    // First check if docker is available
+                    sh '''
+                        if ! docker ps > /dev/null 2>&1; then
+                            echo "ERROR: Docker is not accessible"
+                            echo "Ensure Jenkins container has Docker socket mounted:"
+                            echo "  docker stop jenkins"
+                            echo "  docker run -d -v /var/run/docker.sock:/var/run/docker.sock ..."
+                            exit 1
+                        fi
+                    '''
+                    
                     sh '''
                         aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}
                         aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}
