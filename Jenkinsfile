@@ -48,6 +48,45 @@ pipeline {
             }
         }
         
+        stage('Setup Docker') {
+            steps {
+                script {
+                    sh '''
+                        # Check if docker daemon is running
+                        if ! docker ps > /dev/null 2>&1; then
+                            echo "Docker daemon not running, attempting to start..."
+                            sudo systemctl start docker || {
+                                echo "Failed to start Docker daemon"
+                                exit 1
+                            }
+                        fi
+                        
+                        # Check if jenkins user is in docker group
+                        if ! groups | grep -q docker; then
+                            echo "Adding jenkins user to docker group..."
+                            sudo usermod -aG docker jenkins
+                            newgrp docker
+                        fi
+                        
+                        # Fix docker socket permissions if needed
+                        if [ ! -S /var/run/docker.sock ]; then
+                            echo "Docker socket not found"
+                            exit 1
+                        fi
+                        
+                        if ! docker ps > /dev/null 2>&1; then
+                            echo "Fixing docker socket permissions..."
+                            sudo chmod 666 /var/run/docker.sock
+                        fi
+                        
+                        # Verify docker is accessible
+                        docker --version
+                        echo "Docker setup complete"
+                    '''
+                }
+            }
+        }
+        
         stage('Build and Push Images') {
             steps {
                 script {
