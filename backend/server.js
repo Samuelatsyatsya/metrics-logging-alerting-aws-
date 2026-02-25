@@ -6,8 +6,8 @@ import { startMetricsUpdater } from './src/utils/metricsUpdater.js';
 // Load environment variables
 dotenv.config();
 
-const PORT = process.env.PORT;
-const HOST = process.env.HOST;
+const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 async function startServer() {
   try {

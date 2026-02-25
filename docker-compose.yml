@@ -34,12 +34,15 @@ services:
       - "${BACKEND_PORT}:${BACKEND_PORT}"
     environment:
       NODE_ENV: ${NODE_ENV}
+      HOST: 0.0.0.0
       PORT: ${BACKEND_PORT}
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_USER: ${MYSQL_USER}
       DB_PASSWORD: ${MYSQL_PASSWORD}
       DB_NAME: ${MYSQL_DATABASE}
+      API_PREFIX: /api/v1
+      CORS_ORIGIN: "*"
     depends_on:
       mysql:
         condition: service_healthy
@@ -54,7 +57,7 @@ services:
     ports:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
     environment:
-      VITE_API_URL: ${VITE_API_URL}
+      VITE_API_URL: ${VITE_API_URL:-http://backend:5000/api/v1}
     depends_on:
       - backend
     networks:
