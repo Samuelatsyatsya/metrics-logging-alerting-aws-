@@ -52,45 +52,36 @@ pipeline {
             steps {
                 script {
                     sh '''
-                        # Check if docker daemon is running
-                        if ! docker ps > /dev/null 2>&1; then
-                            echo "Docker daemon not running, attempting to start..."
-                            if command -v sudo &> /dev/null; then
-                                sudo systemctl start docker || {
-                                    echo "Failed to start Docker daemon"
-                                    exit 1
-                                }
-                            else
-                                echo "Running in container, docker should be available via docker socket"
-                                exit 1
-                            fi
-                        fi
-                        
-                        # Check if jenkins user is in docker group (only on host machines)
-                        if command -v sudo &> /dev/null && ! groups | grep -q docker; then
-                            echo "Adding jenkins user to docker group..."
-                            sudo usermod -aG docker jenkins
-                            newgrp docker
-                        fi
-                        
-                        # Fix docker socket permissions if needed
+                        # Check if docker socket exists
                         if [ ! -S /var/run/docker.sock ]; then
-                            echo "Docker socket not found"
-                            exit 1
+                            echo "Docker socket not found at /var/run/docker.sock"
+                            echo "Skipping docker setup - Jenkins may be running without docker socket mount"
+                            exit 0
                         fi
                         
-                        if ! docker ps > /dev/null 2>&1; then
-                            echo "Fixing docker socket permissions..."
-                            if command -v sudo &> /dev/null; then
-                                sudo chmod 666 /var/run/docker.sock
-                            else
-                                chmod 666 /var/run/docker.sock
-                            fi
+                        # Try to access docker
+                        if docker ps > /dev/null 2>&1; then
+                            echo "Docker is already accessible"
+                            docker --version
+                            exit 0
                         fi
                         
-                        # Verify docker is accessible
-                        docker --version
-                        echo "Docker setup complete"
+                        # If we get here, docker socket exists but not accessible
+                        echo "Docker socket exists but not accessible"
+                        
+                        # Try to fix permissions without sudo
+                        chmod 666 /var/run/docker.sock 2>/dev/null && {
+                            echo "Fixed docker socket permissions"
+                            docker --version
+                            echo "Docker setup complete"
+                            exit 0
+                        }
+                        
+                        # If we can't fix it, fail gracefully with instructions
+                        echo "Unable to access Docker daemon"
+                        echo "Please ensure Jenkins container has Docker socket mounted:"
+                        echo "  docker run -v /var/run/docker.sock:/var/run/docker.sock ..."
+                        exit 1
                     '''
                 }
             }
