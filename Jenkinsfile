@@ -55,14 +55,19 @@ pipeline {
                         # Check if docker daemon is running
                         if ! docker ps > /dev/null 2>&1; then
                             echo "Docker daemon not running, attempting to start..."
-                            sudo systemctl start docker || {
-                                echo "Failed to start Docker daemon"
+                            if command -v sudo &> /dev/null; then
+                                sudo systemctl start docker || {
+                                    echo "Failed to start Docker daemon"
+                                    exit 1
+                                }
+                            else
+                                echo "Running in container, docker should be available via docker socket"
                                 exit 1
-                            }
+                            fi
                         fi
                         
-                        # Check if jenkins user is in docker group
-                        if ! groups | grep -q docker; then
+                        # Check if jenkins user is in docker group (only on host machines)
+                        if command -v sudo &> /dev/null && ! groups | grep -q docker; then
                             echo "Adding jenkins user to docker group..."
                             sudo usermod -aG docker jenkins
                             newgrp docker
@@ -76,7 +81,11 @@ pipeline {
                         
                         if ! docker ps > /dev/null 2>&1; then
                             echo "Fixing docker socket permissions..."
-                            sudo chmod 666 /var/run/docker.sock
+                            if command -v sudo &> /dev/null; then
+                                sudo chmod 666 /var/run/docker.sock
+                            else
+                                chmod 666 /var/run/docker.sock
+                            fi
                         fi
                         
                         # Verify docker is accessible
