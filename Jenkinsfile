@@ -102,21 +102,27 @@ pipeline {
                         fi
 
                         echo "Running gitleaks scan..."
+                        SCAN_CONTAINER=""
+                        cleanup() {
+                            if [ -n "${SCAN_CONTAINER}" ]; then
+                                docker rm -f "${SCAN_CONTAINER}" >/dev/null 2>&1 || true
+                            fi
+                        }
+                        trap cleanup EXIT
+
                         if [ -f "${WORKSPACE}/.gitleaks.toml" ]; then
                             echo "Using repository gitleaks config: .gitleaks.toml"
-                            docker run --rm \
-                                -v "${WORKSPACE}:/repo" \
-                                -w /repo \
-                                ghcr.io/gitleaks/gitleaks:latest \
-                                detect --source . --no-git --redact --config /repo/.gitleaks.toml --exit-code 1
+                            SCAN_CONTAINER="$(docker create -w /repo ghcr.io/gitleaks/gitleaks:latest \
+                                detect --source . --no-git --redact --config .gitleaks.toml --exit-code 1)"
                         else
                             echo "WARNING: .gitleaks.toml not found in workspace, using default gitleaks rules"
-                            docker run --rm \
-                                -v "${WORKSPACE}:/repo" \
-                                -w /repo \
-                                ghcr.io/gitleaks/gitleaks:latest \
-                                detect --source . --no-git --redact --exit-code 1
+                            SCAN_CONTAINER="$(docker create -w /repo ghcr.io/gitleaks/gitleaks:latest \
+                                detect --source . --no-git --redact --exit-code 1)"
                         fi
+
+                        # Avoid bind-mount path issues when Jenkins runs in a container.
+                        docker cp "${WORKSPACE}/." "${SCAN_CONTAINER}:/repo"
+                        docker start -a "${SCAN_CONTAINER}"
                     '''
                 }
             }
