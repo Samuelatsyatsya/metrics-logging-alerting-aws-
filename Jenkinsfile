@@ -91,7 +91,27 @@ pipeline {
                 }
             }
         }
-        
+
+        stage('Secret Scan (Gitleaks)') {
+            steps {
+                script {
+                    sh '''
+                        if ! docker ps > /dev/null 2>&1; then
+                            echo "ERROR: Docker is not accessible for gitleaks scan"
+                            exit 1
+                        fi
+
+                        echo "Running gitleaks scan..."
+                        docker run --rm \
+                            -v "${WORKSPACE}:/repo" \
+                            -w /repo \
+                            ghcr.io/gitleaks/gitleaks:latest \
+                            detect --source . --no-git --redact --config /repo/.gitleaks.toml --exit-code 1
+                    '''
+                }
+            }
+        }
+
         stage('Build and Push Images') {
             steps {
                 script {

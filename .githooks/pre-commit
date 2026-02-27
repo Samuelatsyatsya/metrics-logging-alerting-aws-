@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+
+run_local_gitleaks() {
+  # Prefer staged-content scanning when available.
+  if gitleaks help 2>/dev/null | grep -q "protect"; then
+    gitleaks protect --staged --redact --config "${ROOT_DIR}/.gitleaks.toml"
+  else
+    # Fallback to workspace scan if protect mode is not supported.
+    gitleaks detect --source "${ROOT_DIR}" --no-git --redact --config "${ROOT_DIR}/.gitleaks.toml"
+  fi
+}
+
+run_docker_gitleaks() {
+  docker run --rm \
+    -v "${ROOT_DIR}:/repo" \
+    -w /repo \
+    ghcr.io/gitleaks/gitleaks:latest \
+    detect --source . --no-git --redact --config /repo/.gitleaks.toml
+}
+
+if command -v gitleaks >/dev/null 2>&1; then
+  run_local_gitleaks
+elif command -v docker >/dev/null 2>&1; then
+  if docker ps >/dev/null 2>&1; then
+    run_docker_gitleaks
+  else
+    echo "Docker is installed but not accessible for gitleaks scan."
+    echo "Install gitleaks locally or fix Docker permissions."
+    exit 1
+  fi
+else
+  echo "gitleaks pre-commit check failed: install gitleaks or Docker."
+  exit 1
+fi
