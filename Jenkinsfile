@@ -102,11 +102,21 @@ pipeline {
                         fi
 
                         echo "Running gitleaks scan..."
-                        docker run --rm \
-                            -v "${WORKSPACE}:/repo" \
-                            -w /repo \
-                            ghcr.io/gitleaks/gitleaks:latest \
-                            detect --source . --no-git --redact --config /repo/.gitleaks.toml --exit-code 1
+                        if [ -f "${WORKSPACE}/.gitleaks.toml" ]; then
+                            echo "Using repository gitleaks config: .gitleaks.toml"
+                            docker run --rm \
+                                -v "${WORKSPACE}:/repo" \
+                                -w /repo \
+                                ghcr.io/gitleaks/gitleaks:latest \
+                                detect --source . --no-git --redact --config /repo/.gitleaks.toml --exit-code 1
+                        else
+                            echo "WARNING: .gitleaks.toml not found in workspace, using default gitleaks rules"
+                            docker run --rm \
+                                -v "${WORKSPACE}:/repo" \
+                                -w /repo \
+                                ghcr.io/gitleaks/gitleaks:latest \
+                                detect --source . --no-git --redact --exit-code 1
+                        fi
                     '''
                 }
             }
