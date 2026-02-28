@@ -240,17 +240,36 @@ pipeline {
                         ecr_login() {
                             REGISTRY="$1"
                             echo "Logging in to ECR registry: ${REGISTRY}"
-                            docker run --rm \
+
+                            AWS_CLI_IMAGE=""
+                            for CANDIDATE in public.ecr.aws/aws-cli/aws-cli:latest amazon/aws-cli:latest; do
+                                if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                    AWS_CLI_IMAGE="${CANDIDATE}"
+                                    break
+                                fi
+                            done
+
+                            if [ -z "${AWS_CLI_IMAGE}" ]; then
+                                echo "Unable to pull a supported AWS CLI image for ECR login"
+                                exit 1
+                            fi
+
+                            PASSWORD="$(docker run --rm \
                                 -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
                                 -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
                                 -e AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-}" \
                                 -e AWS_DEFAULT_REGION="${AWS_REGION}" \
-                                amazon/aws-cli:2 \
-                                ecr get-login-password --region "${AWS_REGION}" | \
-                            docker login --username AWS --password-stdin "${REGISTRY}" || {
+                                "${AWS_CLI_IMAGE}" \
+                                ecr get-login-password --region "${AWS_REGION}")" || {
+                                echo "Failed to obtain ECR login password from AWS CLI container"
+                                exit 1
+                            }
+
+                            echo "${PASSWORD}" | docker login --username AWS --password-stdin "${REGISTRY}" || {
                                 echo "ECR login failed for ${REGISTRY}"
                                 exit 1
                             }
+                            PASSWORD=""
                         }
 
                         ecr_login "${ECR_BACKEND_REPO%/*}"
