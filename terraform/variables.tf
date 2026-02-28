@@ -106,36 +106,37 @@ variable "ecs_health_check_path" {
 variable "ecs_alb_internal" {
   description = "Whether ECS ALB is internal/private"
   type        = bool
+  default     = true
 }
 
 variable "ecs_alb_drop_invalid_header_fields" {
   description = "Whether ALB should drop invalid HTTP header fields"
   type        = bool
+  default     = true
 }
 
 variable "ecs_alb_ingress_cidr_blocks" {
   description = "CIDR blocks allowed to reach ALB listener"
   type        = list(string)
+  default     = ["10.0.0.0/8"]
 }
 
 variable "ecs_alb_egress_cidr_blocks" {
   description = "CIDR blocks allowed for ALB egress; empty list uses VPC CIDR"
   type        = list(string)
+  default     = []
 }
 
 variable "ecs_service_egress_cidr_blocks" {
   description = "CIDR blocks allowed for ECS task egress; empty list uses VPC CIDR"
   type        = list(string)
+  default     = []
 }
 
 variable "ecs_alb_listener_port" {
   description = "ALB listener port"
   type        = number
-}
-
-variable "ecs_alb_listener_protocol" {
-  description = "ALB listener protocol (HTTP or HTTPS)"
-  type        = string
+  default     = 443
 }
 
 variable "ecs_alb_certificate_arn" {
@@ -146,6 +147,7 @@ variable "ecs_alb_certificate_arn" {
 variable "ecs_alb_ssl_policy" {
   description = "SSL policy for HTTPS ALB listener"
   type        = string
+  default     = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 }
 
 variable "backend_image" {

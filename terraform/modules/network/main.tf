@@ -23,7 +23,6 @@ locals {
   effective_subnet_ids       = length(var.subnet_ids) > 0 ? var.subnet_ids : data.aws_subnets.selected[0].ids
   alb_name                   = "${var.project_name}-alb"
   target_group_name          = substr("${var.project_name}-frontend-tg", 0, 32)
-  alb_listener_protocol      = upper(var.alb_listener_protocol)
   effective_alb_egress_cidrs = length(var.alb_egress_cidr_blocks) > 0 ? var.alb_egress_cidr_blocks : [local.effective_vpc_cidr]
   effective_ecs_egress_cidrs = length(var.ecs_service_egress_cidr_blocks) > 0 ? var.ecs_service_egress_cidr_blocks : [local.effective_vpc_cidr]
 }
@@ -108,8 +107,6 @@ resource "aws_lb_target_group" "frontend" {
 }
 
 resource "aws_lb_listener" "https" {
-  count = local.alb_listener_protocol == "HTTPS" ? 1 : 0
-
   load_balancer_arn = aws_lb.main.arn
   port              = var.alb_listener_port
   protocol          = "HTTPS"
@@ -124,20 +121,7 @@ resource "aws_lb_listener" "https" {
   lifecycle {
     precondition {
       condition     = trimspace(var.alb_certificate_arn) != ""
-      error_message = "alb_certificate_arn must be set when alb_listener_protocol is HTTPS."
+      error_message = "alb_certificate_arn must be set for HTTPS ALB listener."
     }
-  }
-}
-
-resource "aws_lb_listener" "http" {
-  count = local.alb_listener_protocol == "HTTP" ? 1 : 0
-
-  load_balancer_arn = aws_lb.main.arn
-  port              = var.alb_listener_port
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.frontend.arn
   }
 }

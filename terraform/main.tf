@@ -47,7 +47,6 @@ module "network" {
   alb_egress_cidr_blocks         = var.ecs_alb_egress_cidr_blocks
   ecs_service_egress_cidr_blocks = var.ecs_service_egress_cidr_blocks
   alb_listener_port              = var.ecs_alb_listener_port
-  alb_listener_protocol          = var.ecs_alb_listener_protocol
   alb_certificate_arn            = var.ecs_alb_certificate_arn
   alb_ssl_policy                 = var.ecs_alb_ssl_policy
   tags                           = var.tags
@@ -100,11 +99,6 @@ moved {
 }
 
 moved {
-  from = module.ecs[0].aws_lb_listener.http
-  to   = module.network[0].aws_lb_listener.http
-}
-
-moved {
-  from = module.ecs[0].aws_lb_listener.https
+  from = module.ecs[0].aws_lb_listener.https[0]
   to   = module.network[0].aws_lb_listener.https
 }

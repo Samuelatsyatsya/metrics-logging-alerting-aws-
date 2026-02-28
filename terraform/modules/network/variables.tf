@@ -63,17 +63,6 @@ variable "alb_listener_port" {
   default     = 443
 }
 
-variable "alb_listener_protocol" {
-  description = "ALB listener protocol (HTTP or HTTPS)"
-  type        = string
-  default     = "HTTPS"
-
-  validation {
-    condition     = contains(["HTTP", "HTTPS"], upper(var.alb_listener_protocol))
-    error_message = "alb_listener_protocol must be either HTTP or HTTPS."
-  }
-}
-
 variable "alb_certificate_arn" {
   description = "ACM certificate ARN for HTTPS ALB listener"
   type        = string
