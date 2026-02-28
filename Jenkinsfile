@@ -478,215 +478,283 @@ pipeline {
             }
         }
         
-        stage('Setup EC2') {
+        stage('Render ECS Task Definition') {
             steps {
                 script {
                     sh '''
-                        ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} "
-                            # Install Docker if not exists
-                            if ! command -v docker &> /dev/null; then
-                                echo 'Installing Docker...'
-                                curl -fsSL https://get.docker.com -o get-docker.sh
-                                sudo sh get-docker.sh
-                                sudo usermod -aG docker ubuntu
-                                rm -f get-docker.sh
+                        if ! docker ps > /dev/null 2>&1; then
+                            echo "ERROR: Docker is not accessible for ECS task rendering"
+                            exit 1
+                        fi
+
+                        if [ -z "${ECS_CLUSTER:-}" ] || [ -z "${ECS_SERVICE:-}" ]; then
+                            echo "ERROR: ECS_CLUSTER and ECS_SERVICE environment variables are required"
+                            exit 1
+                        fi
+
+                        AWS_CLI_IMAGE=""
+                        for CANDIDATE in public.ecr.aws/aws-cli/aws-cli:latest amazon/aws-cli:latest; do
+                            if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                AWS_CLI_IMAGE="${CANDIDATE}"
+                                break
                             fi
-                            
-                            # Install Docker Compose if not exists
-                            if ! command -v docker-compose &> /dev/null; then
-                                echo 'Installing Docker Compose...'
-                                sudo curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-\$(uname -s)-\$(uname -m) -o /usr/local/bin/docker-compose
-                                sudo chmod +x /usr/local/bin/docker-compose
-                            fi
-                            
-                            # Wait for apt lock to be released and install unzip
-                            if ! command -v unzip &> /dev/null; then
-                                echo 'Waiting for apt lock...'
-                                while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-                                    echo 'Waiting for other apt process to finish...'
-                                    sleep 5
-                                done
-                                
-                                echo 'Installing unzip...'
-                                sudo apt-get update -qq
-                                sudo apt-get install -y -qq unzip
-                            fi
-                            
-                            # Install AWS CLI v2 if not exists
-                            if ! command -v aws &> /dev/null; then
-                                echo 'Installing AWS CLI v2...'
-                                cd /tmp
-                                curl -s https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscliv2.zip
-                                unzip -q awscliv2.zip
-                                sudo ./aws/install
-                                rm -rf aws awscliv2.zip
-                            fi
-                            
-                            # Create app directory
-                            mkdir -p /home/ubuntu/rock-paper-scissors
-                            
-                            echo 'Setup complete'
-                            docker --version
-                            docker-compose --version
-                            aws --version
-                        "
+                        done
+
+                        if [ -z "${AWS_CLI_IMAGE}" ]; then
+                            echo "ERROR: Unable to pull a supported AWS CLI image"
+                            exit 1
+                        fi
+
+                        CURRENT_TASKDEF_ARN="$(docker run --rm \
+                            -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+                            -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+                            -e AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-}" \
+                            -e AWS_DEFAULT_REGION="${AWS_REGION}" \
+                            "${AWS_CLI_IMAGE}" \
+                            ecs describe-services \
+                                --cluster "${ECS_CLUSTER}" \
+                                --services "${ECS_SERVICE}" \
+                                --query 'services[0].taskDefinition' \
+                                --output text)"
+
+                        if [ -z "${CURRENT_TASKDEF_ARN}" ] || [ "${CURRENT_TASKDEF_ARN}" = "None" ]; then
+                            echo "ERROR: Could not resolve current task definition from ECS service"
+                            exit 1
+                        fi
+
+                        docker run --rm \
+                            -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+                            -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+                            -e AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-}" \
+                            -e AWS_DEFAULT_REGION="${AWS_REGION}" \
+                            "${AWS_CLI_IMAGE}" \
+                            ecs describe-task-definition \
+                                --task-definition "${CURRENT_TASKDEF_ARN}" \
+                                --query 'taskDefinition' \
+                                --output json > "${WORKSPACE}/taskdef.base.json"
+
+                        BACKEND_CONTAINER_NAME_VALUE="${ECS_BACKEND_CONTAINER_NAME:-backend}"
+                        FRONTEND_CONTAINER_NAME_VALUE="${ECS_FRONTEND_CONTAINER_NAME:-frontend}"
+
+                        jq \
+                          --arg backendImage "${ECR_BACKEND_REPO}:${IMAGE_TAG}" \
+                          --arg frontendImage "${ECR_FRONTEND_REPO}:${IMAGE_TAG}" \
+                          --arg backendName "${BACKEND_CONTAINER_NAME_VALUE}" \
+                          --arg frontendName "${FRONTEND_CONTAINER_NAME_VALUE}" \
+                          '
+                            del(
+                              .taskDefinitionArn,
+                              .revision,
+                              .status,
+                              .requiresAttributes,
+                              .compatibilities,
+                              .registeredAt,
+                              .registeredBy,
+                              .deregisteredAt
+                            )
+                            | .containerDefinitions |= map(
+                                if .name == $backendName then .image = $backendImage
+                                elif .name == $frontendName then .image = $frontendImage
+                                elif (.name | test("backend"; "i")) then .image = $backendImage
+                                elif (.name | test("frontend"; "i")) then .image = $frontendImage
+                                else .
+                                end
+                              )
+                          ' "${WORKSPACE}/taskdef.base.json" > "${WORKSPACE}/taskdef.rendered.json"
+
+                        echo "Rendered task definition: ${WORKSPACE}/taskdef.rendered.json"
                     '''
                 }
             }
         }
-        
-        stage('Deploy to EC2') {
+
+        stage('Register ECS Task Definition') {
             steps {
                 script {
                     sh '''
-                        # Copy docker-compose file to EC2
-                        scp -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} \
-                            docker-compose.yml ${EC2_USER}@${EC2_HOST}:/home/${EC2_USER}/rock-paper-scissors/
-                    '''
-                    
-                    sh '''
-                        ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} "
-                            cd /home/${EC2_USER}/rock-paper-scissors
-                            
-                            # Create .env file from Jenkins credentials
-                            cat > .env << 'ENVEOF'
-# Database Configuration
-MYSQL_PORT=''' + env.MYSQL_PORT + '''
-MYSQL_ROOT_PASSWORD=''' + env.MYSQL_ROOT_PASSWORD + '''
-MYSQL_DATABASE=''' + env.MYSQL_DATABASE + '''
-MYSQL_USER=''' + env.MYSQL_USER + '''
-MYSQL_PASSWORD=''' + env.MYSQL_PASSWORD + '''
+                        if [ ! -f "${WORKSPACE}/taskdef.rendered.json" ]; then
+                            echo "ERROR: taskdef.rendered.json not found"
+                            exit 1
+                        fi
 
-# Backend Configuration
-BACKEND_IMAGE=''' + env.ECR_BACKEND_REPO + ''':latest
-BACKEND_PORT=''' + env.BACKEND_PORT + '''
-NODE_ENV=''' + env.NODE_ENV + '''
-DB_HOST=''' + env.DB_HOST + '''
-DB_PORT=''' + env.MYSQL_PORT + '''
-DB_DIALECT=''' + env.DB_DIALECT + '''
+                        AWS_CLI_IMAGE=""
+                        for CANDIDATE in public.ecr.aws/aws-cli/aws-cli:latest amazon/aws-cli:latest; do
+                            if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                AWS_CLI_IMAGE="${CANDIDATE}"
+                                break
+                            fi
+                        done
 
-# Frontend Configuration
-FRONTEND_IMAGE=''' + env.ECR_FRONTEND_REPO + ''':latest
-FRONTEND_PORT=''' + env.FRONTEND_PORT + '''
-VITE_API_URL=''' + env.VITE_API_URL + '''
-ENVEOF
-                            
-                            # Secure the .env file
-                            chmod 600 .env
-                            
-                            # Configure AWS CLI on EC2
-                            aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}
-                            aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}
-                            aws configure set region ${AWS_REGION}
-                            
-                            # Login to ECR
-                            aws ecr get-login-password --region ${AWS_REGION} | \
-                            docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*} || {
-                                echo "ECR login on EC2 failed!"
-                                exit 1
-                            }
-                            
-                            # Pull latest images
-                            echo "Pulling backend image: ${ECR_BACKEND_REPO}:latest"
-                            docker pull ${ECR_BACKEND_REPO}:latest || {
-                                echo "Failed to pull backend image"
-                                exit 1
-                            }
-                            
-                            echo "Pulling frontend image: ${ECR_FRONTEND_REPO}:latest"
-                            docker pull ${ECR_FRONTEND_REPO}:latest || {
-                                echo "Failed to pull frontend image"
-                                exit 1
-                            }
-                            
-                            # Verify images exist
-                            echo "Verifying images..."
-                            docker image ls | grep -E 'backend|frontend' || {
-                                echo "Images not found after pull!"
-                                exit 1
-                            }
-                            
-                            echo ".env file contents:"
-                            cat .env
-                            
-                            # Stop and remove all containers managed by compose
-                            docker compose rm -f || true
-                            
-                            # Remove the existing network
-                            docker network rm rps-app_app-network 2>/dev/null || true
-                            
-                            # Wait a moment for cleanup
-                            sleep 5
-                            
-                            # Verify images one more time before compose up
-                            echo "Images available before docker compose up:"
-                            docker image ls
-                            
-                            # Start new containers with verbose output
-                            docker compose up -d --no-color
-                            
-                            # Clean up old images
-                            docker image prune -af
-                        "
+                        if [ -z "${AWS_CLI_IMAGE}" ]; then
+                            echo "ERROR: Unable to pull a supported AWS CLI image"
+                            exit 1
+                        fi
+
+                        REGISTER_CONTAINER=""
+                        cleanup() {
+                            if [ -n "${REGISTER_CONTAINER}" ]; then
+                                docker rm -f "${REGISTER_CONTAINER}" >/dev/null 2>&1 || true
+                            fi
+                        }
+                        trap cleanup EXIT
+
+                        REGISTER_CONTAINER="$(docker create \
+                            --entrypoint sh \
+                            -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+                            -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+                            -e AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-}" \
+                            -e AWS_DEFAULT_REGION="${AWS_REGION}" \
+                            -w /workspace \
+                            "${AWS_CLI_IMAGE}" \
+                            -lc 'aws ecs register-task-definition --cli-input-json file://taskdef.rendered.json --query "taskDefinition.taskDefinitionArn" --output text > /workspace/new_taskdef_arn.txt')"
+
+                        docker cp "${WORKSPACE}/taskdef.rendered.json" "${REGISTER_CONTAINER}:/workspace/taskdef.rendered.json"
+                        docker start -a "${REGISTER_CONTAINER}"
+                        docker cp "${REGISTER_CONTAINER}:/workspace/new_taskdef_arn.txt" "${WORKSPACE}/new_taskdef_arn.txt"
+
+                        echo "Registered task definition ARN:"
+                        cat "${WORKSPACE}/new_taskdef_arn.txt"
                     '''
                 }
             }
         }
-        
+
+        stage('Update ECS Service') {
+            steps {
+                script {
+                    sh '''
+                        if [ -z "${ECS_CLUSTER:-}" ] || [ -z "${ECS_SERVICE:-}" ]; then
+                            echo "ERROR: ECS_CLUSTER and ECS_SERVICE environment variables are required"
+                            exit 1
+                        fi
+
+                        if [ ! -f "${WORKSPACE}/new_taskdef_arn.txt" ]; then
+                            echo "ERROR: new_taskdef_arn.txt not found"
+                            exit 1
+                        fi
+
+                        AWS_CLI_IMAGE=""
+                        for CANDIDATE in public.ecr.aws/aws-cli/aws-cli:latest amazon/aws-cli:latest; do
+                            if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                AWS_CLI_IMAGE="${CANDIDATE}"
+                                break
+                            fi
+                        done
+
+                        if [ -z "${AWS_CLI_IMAGE}" ]; then
+                            echo "ERROR: Unable to pull a supported AWS CLI image"
+                            exit 1
+                        fi
+
+                        UPDATE_CONTAINER=""
+                        cleanup() {
+                            if [ -n "${UPDATE_CONTAINER}" ]; then
+                                docker rm -f "${UPDATE_CONTAINER}" >/dev/null 2>&1 || true
+                            fi
+                        }
+                        trap cleanup EXIT
+
+                        UPDATE_CONTAINER="$(docker create \
+                            --entrypoint sh \
+                            -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+                            -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+                            -e AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-}" \
+                            -e AWS_DEFAULT_REGION="${AWS_REGION}" \
+                            -e ECS_CLUSTER="${ECS_CLUSTER}" \
+                            -e ECS_SERVICE="${ECS_SERVICE}" \
+                            -w /workspace \
+                            "${AWS_CLI_IMAGE}" \
+                            -lc '
+                                set -e
+                                NEW_TASKDEF_ARN="$(cat /workspace/new_taskdef_arn.txt)"
+                                aws ecs update-service --cluster "${ECS_CLUSTER}" --service "${ECS_SERVICE}" --task-definition "${NEW_TASKDEF_ARN}" > /workspace/ecs-service-update.json
+                                aws ecs wait services-stable --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}"
+                                aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query "services[0].[status,desiredCount,runningCount,pendingCount,taskDefinition]" --output table > /workspace/ecs-service-status.txt
+                            ')"
+
+                        docker cp "${WORKSPACE}/new_taskdef_arn.txt" "${UPDATE_CONTAINER}:/workspace/new_taskdef_arn.txt"
+                        docker start -a "${UPDATE_CONTAINER}"
+                        docker cp "${UPDATE_CONTAINER}:/workspace/ecs-service-status.txt" "${WORKSPACE}/ecs-service-status.txt"
+
+                        echo "ECS service status:"
+                        cat "${WORKSPACE}/ecs-service-status.txt"
+                    '''
+                }
+            }
+        }
+
         stage('Health Check') {
             steps {
                 script {
                     sh '''
-                        sleep 30
-                        ssh -o StrictHostKeyChecking=no -i ${SSH_PRIVATE_KEY} ${EC2_USER}@${EC2_HOST} '
-                            BACKEND_PORT=''' + env.BACKEND_PORT + '''
-                            FRONTEND_PORT=''' + env.FRONTEND_PORT + '''
-                            
-                            echo "Checking container status..."
-                            docker ps -a
-                            
-                            echo "Backend container logs (last 100 lines):"
-                            docker logs rps-backend 2>&1 | tail -100
-                            
-                            echo "Checking if ports are listening..."
-                            ss -tlnp 2>/dev/null || netstat -tlnp
-                            
-                            # Check backend health with retry
+                        if [ -z "${ECS_CLUSTER:-}" ] || [ -z "${ECS_SERVICE:-}" ]; then
+                            echo "ERROR: ECS_CLUSTER and ECS_SERVICE environment variables are required"
+                            exit 1
+                        fi
+
+                        AWS_CLI_IMAGE=""
+                        for CANDIDATE in public.ecr.aws/aws-cli/aws-cli:latest amazon/aws-cli:latest; do
+                            if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                AWS_CLI_IMAGE="${CANDIDATE}"
+                                break
+                            fi
+                        done
+
+                        if [ -z "${AWS_CLI_IMAGE}" ]; then
+                            echo "ERROR: Unable to pull a supported AWS CLI image"
+                            exit 1
+                        fi
+
+                        SERVICE_HEALTH="$(docker run --rm \
+                            -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+                            -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+                            -e AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-}" \
+                            -e AWS_DEFAULT_REGION="${AWS_REGION}" \
+                            "${AWS_CLI_IMAGE}" \
+                            ecs describe-services \
+                                --cluster "${ECS_CLUSTER}" \
+                                --services "${ECS_SERVICE}" \
+                                --query 'services[0].[status,desiredCount,runningCount,pendingCount]' \
+                                --output text)"
+
+                        echo "ECS service health: ${SERVICE_HEALTH}"
+
+                        SERVICE_STATUS="$(echo "${SERVICE_HEALTH}" | awk '{print $1}')"
+                        DESIRED_COUNT="$(echo "${SERVICE_HEALTH}" | awk '{print $2}')"
+                        RUNNING_COUNT="$(echo "${SERVICE_HEALTH}" | awk '{print $3}')"
+
+                        if [ "${SERVICE_STATUS}" != "ACTIVE" ]; then
+                            echo "ERROR: ECS service status is ${SERVICE_STATUS}, expected ACTIVE"
+                            exit 1
+                        fi
+
+                        if [ "${RUNNING_COUNT}" -lt "${DESIRED_COUNT}" ]; then
+                            echo "ERROR: ECS running tasks (${RUNNING_COUNT}) are below desired count (${DESIRED_COUNT})"
+                            exit 1
+                        fi
+
+                        if [ -n "${APP_HEALTHCHECK_URL:-}" ]; then
+                            echo "Checking application health endpoint: ${APP_HEALTHCHECK_URL}"
                             MAX_RETRIES=10
                             RETRY_COUNT=0
-                            until [ $RETRY_COUNT -ge $MAX_RETRIES ]; do
-                                echo "Health check attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
-                                if curl -f http://localhost:${BACKEND_PORT}/health 2>/dev/null; then
-                                    echo "Backend is healthy"
+                            until [ "${RETRY_COUNT}" -ge "${MAX_RETRIES}" ]; do
+                                if curl -fsS "${APP_HEALTHCHECK_URL}" >/dev/null 2>&1; then
+                                    echo "Application health endpoint is reachable"
                                     break
                                 fi
                                 RETRY_COUNT=$((RETRY_COUNT + 1))
-                                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                                    sleep 5
+                                if [ "${RETRY_COUNT}" -lt "${MAX_RETRIES}" ]; then
+                                    sleep 10
                                 fi
                             done
-                            
-                            if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
-                                echo "Backend health check failed after $MAX_RETRIES attempts"
+
+                            if [ "${RETRY_COUNT}" -ge "${MAX_RETRIES}" ]; then
+                                echo "ERROR: Health endpoint check failed after ${MAX_RETRIES} attempts"
                                 exit 1
                             fi
-                            
-                            # Check frontend
-                            if curl -f http://localhost:${FRONTEND_PORT} 2>/dev/null; then
-                                echo "Frontend is healthy"
-                            else
-                                echo "Frontend health check failed"
-                                exit 1
-                            fi
-                            
-                            # Check metrics endpoint
-                            if curl -f http://localhost:${BACKEND_PORT}/metrics 2>/dev/null; then
-                                echo "Metrics endpoint is healthy"
-                            else
-                                echo "Metrics endpoint check failed"
-                                exit 1
-                            fi
-                        '
+                        else
+                            echo "APP_HEALTHCHECK_URL not set, skipping HTTP endpoint check"
+                        fi
                     '''
                 }
             }
@@ -696,9 +764,12 @@ ENVEOF
     post {
         success {
             echo 'Pipeline succeeded!'
-            echo "Application deployed to: http://${EC2_HOST}"
-            echo "Backend API: http://${EC2_HOST}:${BACKEND_PORT}"
-            echo "Metrics: http://${EC2_HOST}:${BACKEND_PORT}/metrics"
+            echo "Application deployed via ECS service: ${ECS_CLUSTER}/${ECS_SERVICE}"
+            script {
+                if (env.APP_HEALTHCHECK_URL?.trim()) {
+                    echo "Health endpoint: ${env.APP_HEALTHCHECK_URL}"
+                }
+            }
         }
         failure {
             echo 'Pipeline failed!'
