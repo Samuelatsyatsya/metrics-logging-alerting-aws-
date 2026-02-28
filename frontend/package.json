@@ -24,7 +24,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/**/*.test.js",
+    "test:coverage": "npx --yes c8 --reporter=lcov --reporter=text-summary --all --include=src/**/*.js --exclude=src/main.jsx --exclude=src/App.jsx --exclude=src/hooks/** --exclude=src/components/** --exclude=src/services/** --exclude=src/assets/** node --test tests/**/*.test.js"
   },
   "proxy": "http://localhost:5000"
 }

@@ -133,6 +133,47 @@ pipeline {
             }
         }
 
+        stage('Test and Coverage') {
+            steps {
+                script {
+                    sh '''
+                        if ! docker ps > /dev/null 2>&1; then
+                            echo "ERROR: Docker is not accessible for test execution"
+                            exit 1
+                        fi
+
+                        echo "Running backend and frontend tests with coverage..."
+                        TEST_CONTAINER=""
+                        cleanup() {
+                            if [ -n "${TEST_CONTAINER}" ]; then
+                                docker rm -f "${TEST_CONTAINER}" >/dev/null 2>&1 || true
+                            fi
+                        }
+                        trap cleanup EXIT
+
+                        TEST_CONTAINER="$(docker create -w /workspace node:20-bookworm sh -lc '
+                            set -e
+                            cd /workspace/backend
+                            npm install --no-audit --no-fund
+                            npm run test:coverage
+
+                            cd /workspace/frontend
+                            npm install --no-audit --no-fund
+                            npm run test:coverage
+                        ')"
+
+                        # Avoid bind-mount path issues when Jenkins runs in a container.
+                        docker cp "${WORKSPACE}/." "${TEST_CONTAINER}:/workspace"
+                        docker start -a "${TEST_CONTAINER}"
+
+                        mkdir -p "${WORKSPACE}/backend/coverage" "${WORKSPACE}/frontend/coverage"
+                        docker cp "${TEST_CONTAINER}:/workspace/backend/coverage/lcov.info" "${WORKSPACE}/backend/coverage/lcov.info"
+                        docker cp "${TEST_CONTAINER}:/workspace/frontend/coverage/lcov.info" "${WORKSPACE}/frontend/coverage/lcov.info"
+                    '''
+                }
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
                 script {
