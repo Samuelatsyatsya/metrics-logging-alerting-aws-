@@ -32,6 +32,10 @@ pipeline {
 
         // Node environment
         NODE_ENV = credentials('NODE_ENV')
+
+        // SonarQube
+        SONAR_HOST_URL = credentials('SONAR_HOST_URL')
+        SONAR_TOKEN = credentials('SONAR_TOKEN')
     }
     
     stages {
@@ -122,6 +126,48 @@ pipeline {
 
                         # Avoid bind-mount path issues when Jenkins runs in a container.
                         docker cp "${WORKSPACE}/." "${SCAN_CONTAINER}:/repo"
+                        docker start -a "${SCAN_CONTAINER}"
+                    '''
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                script {
+                    sh '''
+                        if ! docker ps > /dev/null 2>&1; then
+                            echo "ERROR: Docker is not accessible for SonarQube scan"
+                            exit 1
+                        fi
+
+                        if [ -z "${SONAR_HOST_URL}" ] || [ -z "${SONAR_TOKEN}" ]; then
+                            echo "ERROR: SONAR_HOST_URL and SONAR_TOKEN credentials are required"
+                            exit 1
+                        fi
+
+                        echo "Running SonarQube analysis..."
+                        SONAR_PROJECT_KEY_VALUE="${SONAR_PROJECT_KEY:-$(echo "${JOB_NAME}" | tr '/ ' '--')}"
+                        SONAR_PROJECT_NAME_VALUE="${SONAR_PROJECT_NAME:-${JOB_NAME}}"
+                        SCAN_CONTAINER=""
+
+                        cleanup() {
+                            if [ -n "${SCAN_CONTAINER}" ]; then
+                                docker rm -f "${SCAN_CONTAINER}" >/dev/null 2>&1 || true
+                            fi
+                        }
+                        trap cleanup EXIT
+
+                        SCAN_CONTAINER="$(docker create -w /usr/src sonarsource/sonar-scanner-cli:latest \
+                            -Dsonar.host.url="${SONAR_HOST_URL}" \
+                            -Dsonar.token="${SONAR_TOKEN}" \
+                            -Dsonar.projectKey="${SONAR_PROJECT_KEY_VALUE}" \
+                            -Dsonar.projectName="${SONAR_PROJECT_NAME_VALUE}" \
+                            -Dsonar.projectVersion="${BUILD_NUMBER}" \
+                            -Dsonar.qualitygate.wait=true)"
+
+                        # Avoid bind-mount path issues when Jenkins runs in a container.
+                        docker cp "${WORKSPACE}/." "${SCAN_CONTAINER}:/usr/src"
                         docker start -a "${SCAN_CONTAINER}"
                     '''
                 }
