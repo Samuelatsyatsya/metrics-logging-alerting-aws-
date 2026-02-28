@@ -271,7 +271,16 @@ pipeline {
                         SCAN_CONTAINER="$(docker create \
                             -w /workspace \
                             "${TRIVY_IMAGE}" \
-                            sh -lc 'trivy fs /workspace --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed --no-progress --timeout 10m --format json --output /workspace/trivy-results.json --exit-code 1')"
+                            filesystem \
+                            --scanners vuln,misconfig,secret \
+                            --severity HIGH,CRITICAL \
+                            --ignore-unfixed \
+                            --no-progress \
+                            --timeout 10m \
+                            --format json \
+                            --output /workspace/trivy-results.json \
+                            --exit-code 1 \
+                            /workspace)"
 
                         # Avoid bind-mount path issues when Jenkins runs in a container.
                         docker cp "${WORKSPACE}/." "${SCAN_CONTAINER}:/workspace"
