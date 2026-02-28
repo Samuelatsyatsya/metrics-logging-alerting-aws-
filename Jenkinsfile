@@ -36,6 +36,7 @@ pipeline {
         // SonarQube
         SONAR_HOST_URL = credentials('SONAR_HOST_URL')
         SONAR_TOKEN = credentials('SONAR_TOKEN')
+        SONAR_ORGANIZATION = credentials('SONAR_ORGANIZATION')
     }
     
     stages {
@@ -146,6 +147,11 @@ pipeline {
                             exit 1
                         fi
 
+                        if [ -z "${SONAR_ORGANIZATION}" ]; then
+                            echo "ERROR: SONAR_ORGANIZATION credential is required for SonarCloud"
+                            exit 1
+                        fi
+
                         echo "Running SonarQube analysis..."
                         SONAR_PROJECT_KEY_VALUE="${SONAR_PROJECT_KEY:-$(echo "${JOB_NAME}" | tr '/ ' '--')}"
                         SONAR_PROJECT_NAME_VALUE="${SONAR_PROJECT_NAME:-${JOB_NAME}}"
@@ -161,6 +167,7 @@ pipeline {
                         SCAN_CONTAINER="$(docker create -w /usr/src sonarsource/sonar-scanner-cli:latest \
                             -Dsonar.host.url="${SONAR_HOST_URL}" \
                             -Dsonar.token="${SONAR_TOKEN}" \
+                            -Dsonar.organization="${SONAR_ORGANIZATION}" \
                             -Dsonar.projectKey="${SONAR_PROJECT_KEY_VALUE}" \
                             -Dsonar.projectName="${SONAR_PROJECT_NAME_VALUE}" \
                             -Dsonar.projectVersion="${BUILD_NUMBER}" \
