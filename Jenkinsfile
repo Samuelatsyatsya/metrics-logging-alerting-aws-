@@ -296,9 +296,9 @@ pipeline {
                             echo "Trivy finding summary (HIGH/CRITICAL):"
                             jq -r '
                               .Results[]? as $r
-                              | ($r.Vulnerabilities[]? | "VULN\t\(.Severity)\t\(.VulnerabilityID)\t\($r.Target)\t\(.PkgName)@\(.InstalledVersion)\tfix:\(.FixedVersion // "n/a")"),
-                                ($r.Misconfigurations[]? | "MISCONFIG\t\(.Severity)\t\(.ID)\t\($r.Target)\t\(.Title)\tresolution:\(.Resolution // "n/a")"),
-                                ($r.Secrets[]? | "SECRET\t\(.Severity)\t\(.RuleID)\t\($r.Target)\t\(.Title)\tline:\(.StartLine // "n/a")")
+                              | ($r.Vulnerabilities[]? | "VULN\t\\(.Severity)\t\\(.VulnerabilityID)\t\\($r.Target)\t\\(.PkgName)@\\(.InstalledVersion)\tfix:\\(.FixedVersion // "n/a")"),
+                                ($r.Misconfigurations[]? | "MISCONFIG\t\\(.Severity)\t\\(.ID)\t\\($r.Target)\t\\(.Title)\tresolution:\\(.Resolution // "n/a")"),
+                                ($r.Secrets[]? | "SECRET\t\\(.Severity)\t\\(.RuleID)\t\\($r.Target)\t\\(.Title)\tline:\\(.StartLine // "n/a")")
                             ' "${WORKSPACE}/trivy-results.json" | \
                             awk -F'\t' '$2=="HIGH" || $2=="CRITICAL" {print}' || true
                         else
