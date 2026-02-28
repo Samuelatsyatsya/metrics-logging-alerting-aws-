@@ -237,6 +237,61 @@ pipeline {
             }
         }
 
+        stage('Trivy Security Scan') {
+            steps {
+                script {
+                    sh '''
+                        if ! docker ps > /dev/null 2>&1; then
+                            echo "ERROR: Docker is not accessible for Trivy scan"
+                            exit 1
+                        fi
+
+                        echo "Running Trivy filesystem scan..."
+                        TRIVY_IMAGE=""
+                        for CANDIDATE in aquasec/trivy:latest aquasec/trivy:0.57.1; do
+                            if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                TRIVY_IMAGE="${CANDIDATE}"
+                                break
+                            fi
+                        done
+
+                        if [ -z "${TRIVY_IMAGE}" ]; then
+                            echo "ERROR: Unable to pull a supported Trivy image"
+                            exit 1
+                        fi
+
+                        SCAN_CONTAINER=""
+                        cleanup() {
+                            if [ -n "${SCAN_CONTAINER}" ]; then
+                                docker rm -f "${SCAN_CONTAINER}" >/dev/null 2>&1 || true
+                            fi
+                        }
+                        trap cleanup EXIT
+
+                        SCAN_CONTAINER="$(docker create \
+                            -w /workspace \
+                            "${TRIVY_IMAGE}" \
+                            sh -lc 'trivy fs /workspace --scanners vuln,misconfig,secret --severity HIGH,CRITICAL --ignore-unfixed --no-progress --timeout 10m --format json --output /workspace/trivy-results.json --exit-code 1')"
+
+                        # Avoid bind-mount path issues when Jenkins runs in a container.
+                        docker cp "${WORKSPACE}/." "${SCAN_CONTAINER}:/workspace"
+
+                        set +e
+                        docker start -a "${SCAN_CONTAINER}"
+                        TRIVY_EXIT_CODE=$?
+                        set -e
+
+                        docker cp "${SCAN_CONTAINER}:/workspace/trivy-results.json" "${WORKSPACE}/trivy-results.json" || true
+
+                        if [ "${TRIVY_EXIT_CODE}" -ne 0 ]; then
+                            echo "Trivy scan failed with exit code ${TRIVY_EXIT_CODE}"
+                            exit "${TRIVY_EXIT_CODE}"
+                        fi
+                    '''
+                }
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
                 script {
