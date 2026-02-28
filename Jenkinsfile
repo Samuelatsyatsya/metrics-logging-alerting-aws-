@@ -292,8 +292,22 @@ pipeline {
 
                         docker cp "${SCAN_CONTAINER}:/workspace/trivy-results.json" "${WORKSPACE}/trivy-results.json" || true
 
+                        if [ -f "${WORKSPACE}/trivy-results.json" ]; then
+                            echo "Trivy finding summary (HIGH/CRITICAL):"
+                            jq -r '
+                              .Results[]? as $r
+                              | ($r.Vulnerabilities[]? | "VULN\t\(.Severity)\t\(.VulnerabilityID)\t\($r.Target)\t\(.PkgName)@\(.InstalledVersion)\tfix:\(.FixedVersion // "n/a")"),
+                                ($r.Misconfigurations[]? | "MISCONFIG\t\(.Severity)\t\(.ID)\t\($r.Target)\t\(.Title)\tresolution:\(.Resolution // "n/a")"),
+                                ($r.Secrets[]? | "SECRET\t\(.Severity)\t\(.RuleID)\t\($r.Target)\t\(.Title)\tline:\(.StartLine // "n/a")")
+                            ' "${WORKSPACE}/trivy-results.json" | \
+                            awk -F'\t' '$2=="HIGH" || $2=="CRITICAL" {print}' || true
+                        else
+                            echo "WARNING: trivy-results.json was not found after scan."
+                        fi
+
                         if [ "${TRIVY_EXIT_CODE}" -ne 0 ]; then
                             echo "Trivy scan failed with exit code ${TRIVY_EXIT_CODE}"
+                            echo "See ${WORKSPACE}/trivy-results.json for full details."
                             exit "${TRIVY_EXIT_CODE}"
                         fi
                     '''
