@@ -13,25 +13,6 @@ provider "aws" {
   region = var.aws_region
 }
 
-module "cloudtrail" {
-  source = "./modules/cloudtrail"
-
-  project_name            = var.project_name
-  aws_account_id          = var.aws_account_id
-  aws_region              = var.aws_region
-  log_retention_days      = var.log_retention_days
-  glacier_transition_days = var.glacier_transition_days
-  log_expiration_days     = var.log_expiration_days
-  tags                    = var.tags
-}
-
-module "guardduty" {
-  source = "./modules/guardduty"
-
-  finding_publishing_frequency = var.finding_publishing_frequency
-  tags                         = var.tags
-}
-
 module "network" {
   count  = var.enable_ecs ? 1 : 0
   source = "./modules/network"
