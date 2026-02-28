@@ -192,19 +192,6 @@ pipeline {
                         fi
 
                         echo "Running Snyk dependency scan..."
-                        SNYK_IMAGE=""
-                        for CANDIDATE in snyk/snyk-cli:node snyk/snyk-cli:latest; do
-                            if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
-                                SNYK_IMAGE="${CANDIDATE}"
-                                break
-                            fi
-                        done
-
-                        if [ -z "${SNYK_IMAGE}" ]; then
-                            echo "ERROR: Unable to pull a supported Snyk CLI image"
-                            exit 1
-                        fi
-
                         SCAN_CONTAINER=""
                         cleanup() {
                             if [ -n "${SCAN_CONTAINER}" ]; then
@@ -216,8 +203,12 @@ pipeline {
                         SCAN_CONTAINER="$(docker create \
                             -e SNYK_TOKEN="${SNYK_TOKEN}" \
                             -w /workspace \
-                            "${SNYK_IMAGE}" \
-                            sh -lc 'snyk test --all-projects --severity-threshold=high --detection-depth=5 --json-file-output=/workspace/snyk-results.json')"
+                            node:20-bookworm \
+                            sh -lc '
+                                set -e
+                                npm install -g --no-audit --no-fund snyk
+                                snyk test --all-projects --severity-threshold=high --detection-depth=5 --json-file-output=/workspace/snyk-results.json
+                            ')"
 
                         # Avoid bind-mount path issues when Jenkins runs in a container.
                         docker cp "${WORKSPACE}/." "${SCAN_CONTAINER}:/workspace"
