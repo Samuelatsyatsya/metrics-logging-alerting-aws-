@@ -294,13 +294,40 @@ pipeline {
 
                         if [ -f "${WORKSPACE}/trivy-results.json" ]; then
                             echo "Trivy finding summary (HIGH/CRITICAL):"
-                            jq -r '
-                              .Results[]? as $r
-                              | ($r.Vulnerabilities[]? | "VULN\t\\(.Severity)\t\\(.VulnerabilityID)\t\\($r.Target)\t\\(.PkgName)@\\(.InstalledVersion)\tfix:\\(.FixedVersion // "n/a")"),
-                                ($r.Misconfigurations[]? | "MISCONFIG\t\\(.Severity)\t\\(.ID)\t\\($r.Target)\t\\(.Title)\tresolution:\\(.Resolution // "n/a")"),
-                                ($r.Secrets[]? | "SECRET\t\\(.Severity)\t\\(.RuleID)\t\\($r.Target)\t\\(.Title)\tline:\\(.StartLine // "n/a")")
-                            ' "${WORKSPACE}/trivy-results.json" | \
-                            awk -F'\t' '$2=="HIGH" || $2=="CRITICAL" {print}' || true
+                            if command -v jq >/dev/null 2>&1; then
+                                jq -r '
+                                  .Results[]? as $r
+                                  | ($r.Vulnerabilities[]? | "VULN\t\\(.Severity)\t\\(.VulnerabilityID)\t\\($r.Target)\t\\(.PkgName)@\\(.InstalledVersion)\tfix:\\(.FixedVersion // "n/a")"),
+                                    ($r.Misconfigurations[]? | "MISCONFIG\t\\(.Severity)\t\\(.ID)\t\\($r.Target)\t\\(.Title)\tresolution:\\(.Resolution // "n/a")"),
+                                    ($r.Secrets[]? | "SECRET\t\\(.Severity)\t\\(.RuleID)\t\\($r.Target)\t\\(.Title)\tline:\\(.StartLine // "n/a")")
+                                ' "${WORKSPACE}/trivy-results.json" | \
+                                awk -F'\t' '$2=="HIGH" || $2=="CRITICAL" {print}' || true
+                            else
+                                JQ_IMAGE=""
+                                for CANDIDATE in ghcr.io/jqlang/jq:latest imega/jq:latest; do
+                                    if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                        JQ_IMAGE="${CANDIDATE}"
+                                        break
+                                    fi
+                                done
+
+                                if [ -n "${JQ_IMAGE}" ]; then
+                                    echo "Local jq not found; using jq from Docker image ${JQ_IMAGE}"
+                                    JQ_CONTAINER="$(docker create -w /workspace "${JQ_IMAGE}" \
+                                        -r '
+                                          .Results[]? as $r
+                                          | ($r.Vulnerabilities[]? | "VULN\t\\(.Severity)\t\\(.VulnerabilityID)\t\\($r.Target)\t\\(.PkgName)@\\(.InstalledVersion)\tfix:\\(.FixedVersion // "n/a")"),
+                                            ($r.Misconfigurations[]? | "MISCONFIG\t\\(.Severity)\t\\(.ID)\t\\($r.Target)\t\\(.Title)\tresolution:\\(.Resolution // "n/a")"),
+                                            ($r.Secrets[]? | "SECRET\t\\(.Severity)\t\\(.RuleID)\t\\($r.Target)\t\\(.Title)\tline:\\(.StartLine // "n/a")")
+                                        ' /workspace/trivy-results.json)"
+                                    docker cp "${WORKSPACE}/trivy-results.json" "${JQ_CONTAINER}:/workspace/trivy-results.json"
+                                    docker start -a "${JQ_CONTAINER}" | \
+                                    awk -F'\t' '$2=="HIGH" || $2=="CRITICAL" {print}' || true
+                                    docker rm -f "${JQ_CONTAINER}" >/dev/null 2>&1 || true
+                                else
+                                    echo "WARNING: jq is unavailable and no jq image could be pulled; skipping Trivy summary parsing."
+                                fi
+                            fi
                         else
                             echo "WARNING: trivy-results.json was not found after scan."
                         fi
