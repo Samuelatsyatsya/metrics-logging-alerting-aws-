@@ -237,16 +237,27 @@ pipeline {
                     '''
                     
                     sh '''
-                        aws configure set aws_access_key_id ${AWS_ACCESS_KEY_ID}
-                        aws configure set aws_secret_access_key ${AWS_SECRET_ACCESS_KEY}
-                        aws configure set region ${AWS_REGION}
-                    '''
-                    
-                    sh '''
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_BACKEND_REPO%/*} || {
-                            echo "ECR login failed!"
-                            exit 1
+                        ecr_login() {
+                            REGISTRY="$1"
+                            echo "Logging in to ECR registry: ${REGISTRY}"
+                            docker run --rm \
+                                -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+                                -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+                                -e AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-}" \
+                                -e AWS_DEFAULT_REGION="${AWS_REGION}" \
+                                amazon/aws-cli:2 \
+                                ecr get-login-password --region "${AWS_REGION}" | \
+                            docker login --username AWS --password-stdin "${REGISTRY}" || {
+                                echo "ECR login failed for ${REGISTRY}"
+                                exit 1
+                            }
                         }
+
+                        ecr_login "${ECR_BACKEND_REPO%/*}"
+
+                        if [ "${ECR_FRONTEND_REPO%/*}" != "${ECR_BACKEND_REPO%/*}" ]; then
+                            ecr_login "${ECR_FRONTEND_REPO%/*}"
+                        fi
                     '''
                     
                     sh '''
