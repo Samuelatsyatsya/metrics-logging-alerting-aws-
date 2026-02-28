@@ -30,10 +30,10 @@ output "ecs_task_definition_family" {
 
 output "ecs_alb_dns_name" {
   description = "ECS ALB DNS name"
-  value       = try(module.ecs[0].alb_dns_name, null)
+  value       = try(module.network[0].alb_dns_name, null)
 }
 
 output "app_healthcheck_url" {
   description = "Health check URL for Jenkins APP_HEALTHCHECK_URL"
-  value       = try("http://${module.ecs[0].alb_dns_name}${var.ecs_health_check_path}", null)
+  value       = try("${lower(var.ecs_alb_listener_protocol) == "https" ? "https" : "http"}://${module.network[0].alb_dns_name}${var.ecs_health_check_path}", null)
 }

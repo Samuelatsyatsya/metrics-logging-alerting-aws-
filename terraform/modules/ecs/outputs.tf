@@ -22,8 +22,3 @@ output "task_definition_family" {
   description = "Task definition family"
   value       = aws_ecs_task_definition.app.family
 }
-
-output "alb_dns_name" {
-  description = "Public DNS name for the application load balancer"
-  value       = aws_lb.main.dns_name
-}

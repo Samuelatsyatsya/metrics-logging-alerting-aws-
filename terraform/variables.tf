@@ -103,6 +103,51 @@ variable "ecs_health_check_path" {
   type        = string
 }
 
+variable "ecs_alb_internal" {
+  description = "Whether ECS ALB is internal/private"
+  type        = bool
+}
+
+variable "ecs_alb_drop_invalid_header_fields" {
+  description = "Whether ALB should drop invalid HTTP header fields"
+  type        = bool
+}
+
+variable "ecs_alb_ingress_cidr_blocks" {
+  description = "CIDR blocks allowed to reach ALB listener"
+  type        = list(string)
+}
+
+variable "ecs_alb_egress_cidr_blocks" {
+  description = "CIDR blocks allowed for ALB egress; empty list uses VPC CIDR"
+  type        = list(string)
+}
+
+variable "ecs_service_egress_cidr_blocks" {
+  description = "CIDR blocks allowed for ECS task egress; empty list uses VPC CIDR"
+  type        = list(string)
+}
+
+variable "ecs_alb_listener_port" {
+  description = "ALB listener port"
+  type        = number
+}
+
+variable "ecs_alb_listener_protocol" {
+  description = "ALB listener protocol (HTTP or HTTPS)"
+  type        = string
+}
+
+variable "ecs_alb_certificate_arn" {
+  description = "ACM certificate ARN for HTTPS ALB listener"
+  type        = string
+}
+
+variable "ecs_alb_ssl_policy" {
+  description = "SSL policy for HTTPS ALB listener"
+  type        = string
+}
+
 variable "backend_image" {
   description = "Backend container image URI override"
   type        = string

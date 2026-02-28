@@ -8,16 +8,19 @@ variable "aws_region" {
   type        = string
 }
 
-variable "vpc_id" {
-  description = "VPC ID for ECS/ALB resources. If empty, default VPC is used."
-  type        = string
-  default     = ""
+variable "subnet_ids" {
+  description = "Subnets for ECS service networking"
+  type        = list(string)
 }
 
-variable "subnet_ids" {
-  description = "Subnets for ALB and ECS service. If empty, all subnets in selected VPC are used."
-  type        = list(string)
-  default     = []
+variable "service_security_group_id" {
+  description = "Security group ID assigned to ECS service tasks"
+  type        = string
+}
+
+variable "frontend_target_group_arn" {
+  description = "ALB target group ARN for frontend container"
+  type        = string
 }
 
 variable "assign_public_ip" {
@@ -76,12 +79,6 @@ variable "frontend_container_port" {
   description = "Frontend container port"
   type        = number
   default     = 80
-}
-
-variable "health_check_path" {
-  description = "ALB target group health check path for the frontend service"
-  type        = string
-  default     = "/"
 }
 
 variable "backend_env" {
