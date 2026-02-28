@@ -37,6 +37,9 @@ pipeline {
         SONAR_HOST_URL = credentials('SONAR_HOST_URL')
         SONAR_TOKEN = credentials('SONAR_TOKEN')
         SONAR_ORGANIZATION = credentials('SONAR_ORGANIZATION')
+
+        // Snyk
+        SNYK_TOKEN = credentials('SNYK_TOKEN')
     }
     
     stages {
@@ -169,6 +172,67 @@ pipeline {
                         mkdir -p "${WORKSPACE}/backend/coverage" "${WORKSPACE}/frontend/coverage"
                         docker cp "${TEST_CONTAINER}:/workspace/backend/coverage/lcov.info" "${WORKSPACE}/backend/coverage/lcov.info"
                         docker cp "${TEST_CONTAINER}:/workspace/frontend/coverage/lcov.info" "${WORKSPACE}/frontend/coverage/lcov.info"
+                    '''
+                }
+            }
+        }
+
+        stage('Snyk Security Scan') {
+            steps {
+                script {
+                    sh '''
+                        if ! docker ps > /dev/null 2>&1; then
+                            echo "ERROR: Docker is not accessible for Snyk scan"
+                            exit 1
+                        fi
+
+                        if [ -z "${SNYK_TOKEN}" ]; then
+                            echo "ERROR: SNYK_TOKEN credential is required"
+                            exit 1
+                        fi
+
+                        echo "Running Snyk dependency scan..."
+                        SNYK_IMAGE=""
+                        for CANDIDATE in snyk/snyk-cli:node snyk/snyk-cli:latest; do
+                            if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                SNYK_IMAGE="${CANDIDATE}"
+                                break
+                            fi
+                        done
+
+                        if [ -z "${SNYK_IMAGE}" ]; then
+                            echo "ERROR: Unable to pull a supported Snyk CLI image"
+                            exit 1
+                        fi
+
+                        SCAN_CONTAINER=""
+                        cleanup() {
+                            if [ -n "${SCAN_CONTAINER}" ]; then
+                                docker rm -f "${SCAN_CONTAINER}" >/dev/null 2>&1 || true
+                            fi
+                        }
+                        trap cleanup EXIT
+
+                        SCAN_CONTAINER="$(docker create \
+                            -e SNYK_TOKEN="${SNYK_TOKEN}" \
+                            -w /workspace \
+                            "${SNYK_IMAGE}" \
+                            sh -lc 'snyk test --all-projects --severity-threshold=high --detection-depth=5 --json-file-output=/workspace/snyk-results.json')"
+
+                        # Avoid bind-mount path issues when Jenkins runs in a container.
+                        docker cp "${WORKSPACE}/." "${SCAN_CONTAINER}:/workspace"
+
+                        set +e
+                        docker start -a "${SCAN_CONTAINER}"
+                        SNYK_EXIT_CODE=$?
+                        set -e
+
+                        docker cp "${SCAN_CONTAINER}:/workspace/snyk-results.json" "${WORKSPACE}/snyk-results.json" || true
+
+                        if [ "${SNYK_EXIT_CODE}" -ne 0 ]; then
+                            echo "Snyk scan failed with exit code ${SNYK_EXIT_CODE}"
+                            exit "${SNYK_EXIT_CODE}"
+                        fi
                     '''
                 }
             }
