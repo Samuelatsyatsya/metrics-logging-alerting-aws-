@@ -301,6 +301,54 @@ pipeline {
             }
         }
 
+        stage('SBOM Generation (Syft)') {
+            steps {
+                script {
+                    sh '''
+                        if ! docker ps > /dev/null 2>&1; then
+                            echo "ERROR: Docker is not accessible for Syft SBOM generation"
+                            exit 1
+                        fi
+
+                        echo "Generating SBOM with Syft..."
+                        SYFT_IMAGE=""
+                        for CANDIDATE in anchore/syft:latest anchore/syft:v1.20.0; do
+                            if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                SYFT_IMAGE="${CANDIDATE}"
+                                break
+                            fi
+                        done
+
+                        if [ -z "${SYFT_IMAGE}" ]; then
+                            echo "ERROR: Unable to pull a supported Syft image"
+                            exit 1
+                        fi
+
+                        SBOM_CONTAINER=""
+                        cleanup() {
+                            if [ -n "${SBOM_CONTAINER}" ]; then
+                                docker rm -f "${SBOM_CONTAINER}" >/dev/null 2>&1 || true
+                            fi
+                        }
+                        trap cleanup EXIT
+
+                        SBOM_CONTAINER="$(docker create \
+                            -w /workspace \
+                            "${SYFT_IMAGE}" \
+                            dir:/workspace \
+                            -o cyclonedx-json=/workspace/sbom-cyclonedx.json)"
+
+                        # Avoid bind-mount path issues when Jenkins runs in a container.
+                        docker cp "${WORKSPACE}/." "${SBOM_CONTAINER}:/workspace"
+                        docker start -a "${SBOM_CONTAINER}"
+
+                        docker cp "${SBOM_CONTAINER}:/workspace/sbom-cyclonedx.json" "${WORKSPACE}/sbom-cyclonedx.json"
+                        echo "SBOM generated: ${WORKSPACE}/sbom-cyclonedx.json"
+                    '''
+                }
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
                 script {
