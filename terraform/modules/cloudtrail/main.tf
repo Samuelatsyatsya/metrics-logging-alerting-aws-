@@ -1,3 +1,65 @@
+locals {
+  cloudtrail_trail_arn = "arn:aws:cloudtrail:${var.aws_region}:${var.aws_account_id}:trail/${var.project_name}-trail"
+}
+
+data "aws_iam_policy_document" "cloudtrail_kms" {
+  statement {
+    sid = "EnableRootPermissions"
+
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${var.aws_account_id}:root"]
+    }
+
+    actions   = ["kms:*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "AllowCloudTrailToEncryptLogs"
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudtrail.amazonaws.com"]
+    }
+
+    actions = [
+      "kms:GenerateDataKey*",
+      "kms:DescribeKey",
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:ReEncrypt*"
+    ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceArn"
+      values   = [local.cloudtrail_trail_arn]
+    }
+
+    condition {
+      test     = "StringLike"
+      variable = "kms:EncryptionContext:aws:cloudtrail:arn"
+      values   = [local.cloudtrail_trail_arn]
+    }
+  }
+}
+
+resource "aws_kms_key" "cloudtrail" {
+  description             = "KMS key for CloudTrail log encryption"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  policy                  = data.aws_iam_policy_document.cloudtrail_kms.json
+
+  tags = var.tags
+}
+
+resource "aws_kms_alias" "cloudtrail" {
+  name          = "alias/${var.project_name}-cloudtrail"
+  target_key_id = aws_kms_key.cloudtrail.key_id
+}
+
 resource "aws_s3_bucket" "cloudtrail" {
   bucket        = "${var.project_name}-cloudtrail-logs-${var.aws_account_id}"
   force_destroy = true
@@ -18,8 +80,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.cloudtrail.arn
     }
+    bucket_key_enabled = true
   }
 }
 
@@ -131,6 +195,7 @@ resource "aws_iam_role_policy" "cloudtrail_cloudwatch" {
 resource "aws_cloudtrail" "main" {
   name                          = "${var.project_name}-trail"
   s3_bucket_name                = aws_s3_bucket.cloudtrail.id
+  kms_key_id                    = aws_kms_key.cloudtrail.arn
   include_global_service_events = true
   is_multi_region_trail         = true
   enable_log_file_validation    = true
