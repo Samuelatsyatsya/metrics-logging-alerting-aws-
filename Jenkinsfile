@@ -192,6 +192,14 @@ pipeline {
                         fi
 
                         echo "Running Snyk dependency scan..."
+                        SNYK_ORG_ARG=""
+                        if [ -n "${SNYK_ORG:-}" ]; then
+                            SNYK_ORG_ARG="--org=${SNYK_ORG}"
+                            echo "Using Snyk organization: ${SNYK_ORG}"
+                        else
+                            echo "SNYK_ORG not set, using token default organization"
+                        fi
+
                         SCAN_CONTAINER=""
                         cleanup() {
                             if [ -n "${SCAN_CONTAINER}" ]; then
@@ -207,7 +215,7 @@ pipeline {
                             sh -lc '
                                 set -e
                                 npm install -g --no-audit --no-fund snyk
-                                snyk test --all-projects --severity-threshold=high --detection-depth=5 --json-file-output=/workspace/snyk-results.json
+                                snyk test --all-projects --severity-threshold=high --detection-depth=5 '"${SNYK_ORG_ARG}"' --json-file-output=/workspace/snyk-results.json
                             ')"
 
                         # Avoid bind-mount path issues when Jenkins runs in a container.
