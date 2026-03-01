@@ -28,6 +28,16 @@ data "aws_iam_policy_document" "jenkins_ecs_deploy" {
   }
 
   statement {
+    sid    = "EcsTaskDiagnosticsRead"
+    effect = "Allow"
+    actions = [
+      "ecs:ListTasks",
+      "ecs:DescribeTasks"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid       = "PassTaskRolesToEcs"
     effect    = "Allow"
     actions   = ["iam:PassRole"]
