@@ -579,31 +579,77 @@ pipeline {
                         BACKEND_CONTAINER_NAME_VALUE="${ECS_BACKEND_CONTAINER_NAME:-backend}"
                         FRONTEND_CONTAINER_NAME_VALUE="${ECS_FRONTEND_CONTAINER_NAME:-frontend}"
 
-                        jq \
-                          --arg backendImage "${ECR_BACKEND_REPO}:${IMAGE_TAG}" \
-                          --arg frontendImage "${ECR_FRONTEND_REPO}:${IMAGE_TAG}" \
-                          --arg backendName "${BACKEND_CONTAINER_NAME_VALUE}" \
-                          --arg frontendName "${FRONTEND_CONTAINER_NAME_VALUE}" \
-                          '
-                            del(
-                              .taskDefinitionArn,
-                              .revision,
-                              .status,
-                              .requiresAttributes,
-                              .compatibilities,
-                              .registeredAt,
-                              .registeredBy,
-                              .deregisteredAt
-                            )
-                            | .containerDefinitions |= map(
-                                if .name == $backendName then .image = $backendImage
-                                elif .name == $frontendName then .image = $frontendImage
-                                elif (.name | test("backend"; "i")) then .image = $backendImage
-                                elif (.name | test("frontend"; "i")) then .image = $frontendImage
-                                else .
-                                end
-                              )
-                          ' "${WORKSPACE}/taskdef.base.json" > "${WORKSPACE}/taskdef.rendered.json"
+                        if command -v jq >/dev/null 2>&1; then
+                            jq \
+                              --arg backendImage "${ECR_BACKEND_REPO}:${IMAGE_TAG}" \
+                              --arg frontendImage "${ECR_FRONTEND_REPO}:${IMAGE_TAG}" \
+                              --arg backendName "${BACKEND_CONTAINER_NAME_VALUE}" \
+                              --arg frontendName "${FRONTEND_CONTAINER_NAME_VALUE}" \
+                              '
+                                del(
+                                  .taskDefinitionArn,
+                                  .revision,
+                                  .status,
+                                  .requiresAttributes,
+                                  .compatibilities,
+                                  .registeredAt,
+                                  .registeredBy,
+                                  .deregisteredAt
+                                )
+                                | .containerDefinitions |= map(
+                                    if .name == $backendName then .image = $backendImage
+                                    elif .name == $frontendName then .image = $frontendImage
+                                    elif (.name | test("backend"; "i")) then .image = $backendImage
+                                    elif (.name | test("frontend"; "i")) then .image = $frontendImage
+                                    else .
+                                    end
+                                  )
+                              ' "${WORKSPACE}/taskdef.base.json" > "${WORKSPACE}/taskdef.rendered.json"
+                        else
+                            JQ_IMAGE=""
+                            for CANDIDATE in ghcr.io/jqlang/jq:latest imega/jq:latest; do
+                                if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                    JQ_IMAGE="${CANDIDATE}"
+                                    break
+                                fi
+                            done
+
+                            if [ -z "${JQ_IMAGE}" ]; then
+                                echo "ERROR: jq is unavailable and no jq image could be pulled."
+                                exit 1
+                            fi
+
+                            echo "Local jq not found; rendering task definition with Docker jq image ${JQ_IMAGE}"
+                            JQ_CONTAINER="$(docker create -w /workspace "${JQ_IMAGE}" \
+                                --arg backendImage "${ECR_BACKEND_REPO}:${IMAGE_TAG}" \
+                                --arg frontendImage "${ECR_FRONTEND_REPO}:${IMAGE_TAG}" \
+                                --arg backendName "${BACKEND_CONTAINER_NAME_VALUE}" \
+                                --arg frontendName "${FRONTEND_CONTAINER_NAME_VALUE}" \
+                                '
+                                    del(
+                                      .taskDefinitionArn,
+                                      .revision,
+                                      .status,
+                                      .requiresAttributes,
+                                      .compatibilities,
+                                      .registeredAt,
+                                      .registeredBy,
+                                      .deregisteredAt
+                                    )
+                                    | .containerDefinitions |= map(
+                                        if .name == $backendName then .image = $backendImage
+                                        elif .name == $frontendName then .image = $frontendImage
+                                        elif (.name | test("backend"; "i")) then .image = $backendImage
+                                        elif (.name | test("frontend"; "i")) then .image = $frontendImage
+                                        else .
+                                        end
+                                      )
+                                ' /workspace/taskdef.base.json)"
+
+                            docker cp "${WORKSPACE}/taskdef.base.json" "${JQ_CONTAINER}:/workspace/taskdef.base.json"
+                            docker start -a "${JQ_CONTAINER}" > "${WORKSPACE}/taskdef.rendered.json"
+                            docker rm -f "${JQ_CONTAINER}" >/dev/null 2>&1 || true
+                        fi
 
                         echo "Rendered task definition: ${WORKSPACE}/taskdef.rendered.json"
                     '''
