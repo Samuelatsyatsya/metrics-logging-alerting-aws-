@@ -757,16 +757,51 @@ pipeline {
                                 set -e
                                 NEW_TASKDEF_ARN="$(cat /workspace/new_taskdef_arn.txt)"
                                 aws ecs update-service --cluster "${ECS_CLUSTER}" --service "${ECS_SERVICE}" --task-definition "${NEW_TASKDEF_ARN}" > /workspace/ecs-service-update.json
+                                set +e
                                 aws ecs wait services-stable --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}"
+                                WAIT_EXIT_CODE=$?
+                                set -e
                                 aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query "services[0].[status,desiredCount,runningCount,pendingCount,taskDefinition]" --output table > /workspace/ecs-service-status.txt
+                                aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query "services[0].events[0:10].[createdAt,message]" --output table > /workspace/ecs-service-events.txt
+
+                                if [ "${WAIT_EXIT_CODE}" -ne 0 ]; then
+                                    aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query "services[0].deployments[*].[id,status,rolloutState,rolloutStateReason,desiredCount,pendingCount,runningCount,taskDefinition]" --output table > /workspace/ecs-service-deployments.txt || true
+                                    STOPPED_TASKS="$(aws ecs list-tasks --cluster "${ECS_CLUSTER}" --service-name "${ECS_SERVICE}" --desired-status STOPPED --max-items 10 --query "taskArns" --output text)" || true
+                                    if [ -n "${STOPPED_TASKS}" ] && [ "${STOPPED_TASKS}" != "None" ]; then
+                                        aws ecs describe-tasks --cluster "${ECS_CLUSTER}" --tasks ${STOPPED_TASKS} --query "tasks[*].[taskArn,lastStatus,desiredStatus,stoppedReason,containers[0].reason]" --output table > /workspace/ecs-stopped-tasks.txt || true
+                                    fi
+                                    exit "${WAIT_EXIT_CODE}"
+                                fi
                             ')"
 
                         docker cp "${WORKSPACE}/new_taskdef_arn.txt" "${UPDATE_CONTAINER}:/workspace/new_taskdef_arn.txt"
+                        set +e
                         docker start -a "${UPDATE_CONTAINER}"
+                        UPDATE_EXIT_CODE=$?
+                        set -e
                         docker cp "${UPDATE_CONTAINER}:/workspace/ecs-service-status.txt" "${WORKSPACE}/ecs-service-status.txt"
+                        docker cp "${UPDATE_CONTAINER}:/workspace/ecs-service-events.txt" "${WORKSPACE}/ecs-service-events.txt" || true
+                        docker cp "${UPDATE_CONTAINER}:/workspace/ecs-service-deployments.txt" "${WORKSPACE}/ecs-service-deployments.txt" || true
+                        docker cp "${UPDATE_CONTAINER}:/workspace/ecs-stopped-tasks.txt" "${WORKSPACE}/ecs-stopped-tasks.txt" || true
 
                         echo "ECS service status:"
                         cat "${WORKSPACE}/ecs-service-status.txt"
+                        if [ -f "${WORKSPACE}/ecs-service-events.txt" ]; then
+                            echo "Recent ECS service events:"
+                            cat "${WORKSPACE}/ecs-service-events.txt"
+                        fi
+                        if [ -f "${WORKSPACE}/ecs-service-deployments.txt" ]; then
+                            echo "ECS deployment details:"
+                            cat "${WORKSPACE}/ecs-service-deployments.txt"
+                        fi
+                        if [ -f "${WORKSPACE}/ecs-stopped-tasks.txt" ]; then
+                            echo "Recently stopped ECS tasks:"
+                            cat "${WORKSPACE}/ecs-stopped-tasks.txt"
+                        fi
+                        if [ "${UPDATE_EXIT_CODE}" -ne 0 ]; then
+                            echo "ERROR: ECS service did not stabilize (exit code ${UPDATE_EXIT_CODE})"
+                            exit "${UPDATE_EXIT_CODE}"
+                        fi
                     '''
                 }
             }
