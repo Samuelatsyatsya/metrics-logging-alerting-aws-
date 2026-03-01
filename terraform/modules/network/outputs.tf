@@ -1,11 +1,11 @@
 output "vpc_id" {
-  description = "Effective VPC ID used by ALB and ECS networking"
-  value       = local.effective_vpc_id
+  description = "VPC ID used by ALB and ECS networking"
+  value       = aws_vpc.main.id
 }
 
 output "subnet_ids" {
-  description = "Effective subnet IDs used by ALB and ECS service networking"
-  value       = local.effective_subnet_ids
+  description = "Subnet IDs used by ALB and ECS service networking"
+  value       = [for key in sort(keys(aws_subnet.public)) : aws_subnet.public[key].id]
 }
 
 output "frontend_target_group_arn" {

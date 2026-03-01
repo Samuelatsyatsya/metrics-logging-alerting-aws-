@@ -20,5 +20,5 @@ output "ecs_alb_dns_name" {
 
 output "app_healthcheck_url" {
   description = "Health check URL for Jenkins APP_HEALTHCHECK_URL"
-  value       = try("https://${module.network[0].alb_dns_name}${var.ecs_health_check_path}", null)
+  value       = try("http://${module.network[0].alb_dns_name}${var.ecs_health_check_path}", null)
 }

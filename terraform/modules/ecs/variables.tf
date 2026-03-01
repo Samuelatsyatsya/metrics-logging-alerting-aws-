@@ -26,25 +26,21 @@ variable "frontend_target_group_arn" {
 variable "assign_public_ip" {
   description = "Whether to assign a public IP to ECS tasks"
   type        = bool
-  default     = true
 }
 
 variable "desired_count" {
   description = "Desired number of ECS tasks"
   type        = number
-  default     = 1
 }
 
 variable "task_cpu" {
   description = "Task CPU units (e.g., 256, 512, 1024)"
   type        = number
-  default     = 512
 }
 
 variable "task_memory" {
   description = "Task memory in MiB (e.g., 512, 1024, 2048)"
   type        = number
-  default     = 1024
 }
 
 variable "backend_image" {
@@ -60,41 +56,34 @@ variable "frontend_image" {
 variable "backend_container_name" {
   description = "Backend ECS container name"
   type        = string
-  default     = "backend"
 }
 
 variable "frontend_container_name" {
   description = "Frontend ECS container name"
   type        = string
-  default     = "frontend"
 }
 
 variable "backend_container_port" {
   description = "Backend container port"
   type        = number
-  default     = 5000
 }
 
 variable "frontend_container_port" {
   description = "Frontend container port"
   type        = number
-  default     = 80
 }
 
 variable "backend_env" {
   description = "Environment variables for backend container"
   type        = map(string)
-  default     = {}
 }
 
 variable "frontend_env" {
   description = "Environment variables for frontend container"
   type        = map(string)
-  default     = {}
 }
 
 variable "tags" {
   description = "Tags applied to resources"
   type        = map(string)
-  default     = {}
 }

@@ -11,7 +11,6 @@ variable "project_name" {
 variable "tags" {
   description = "Tags applied to all resources"
   type        = map(string)
-  default     = {}
 }
 
 variable "enable_ecs" {
@@ -19,14 +18,34 @@ variable "enable_ecs" {
   type        = bool
 }
 
-variable "vpc_id" {
-  description = "VPC ID for ECS resources. If empty, default VPC is used."
+variable "network_vpc_cidr_block" {
+  description = "CIDR block for the VPC created by the network module"
   type        = string
 }
 
-variable "subnet_ids" {
-  description = "Subnet IDs for ECS/ALB resources. If empty, all subnets in VPC are used."
+variable "network_public_subnet_cidr_blocks" {
+  description = "CIDR blocks for public subnets created by the network module"
   type        = list(string)
+}
+
+variable "network_public_subnet_azs" {
+  description = "Availability zones for public subnets (same order as network_public_subnet_cidr_blocks)"
+  type        = list(string)
+}
+
+variable "network_map_public_ip_on_launch" {
+  description = "Whether public subnets auto-assign public IPs"
+  type        = bool
+}
+
+variable "network_enable_dns_support" {
+  description = "Whether VPC DNS support is enabled"
+  type        = bool
+}
+
+variable "network_enable_dns_hostnames" {
+  description = "Whether VPC DNS hostnames are enabled"
+  type        = bool
 }
 
 variable "ecs_assign_public_ip" {
@@ -77,37 +96,31 @@ variable "ecs_health_check_path" {
 variable "ecs_alb_internal" {
   description = "Whether ECS ALB is internal/private"
   type        = bool
-  default     = true
 }
 
 variable "ecs_alb_drop_invalid_header_fields" {
   description = "Whether ALB should drop invalid HTTP header fields"
   type        = bool
-  default     = true
 }
 
 variable "ecs_alb_ingress_cidr_blocks" {
   description = "CIDR blocks allowed to reach ALB listener"
   type        = list(string)
-  default     = ["10.0.0.0/8"]
 }
 
 variable "ecs_alb_egress_cidr_blocks" {
   description = "CIDR blocks allowed for ALB egress; empty list uses VPC CIDR"
   type        = list(string)
-  default     = []
 }
 
 variable "ecs_service_egress_cidr_blocks" {
   description = "CIDR blocks allowed for ECS task egress; empty list uses VPC CIDR"
   type        = list(string)
-  default     = []
 }
 
 variable "ecs_alb_listener_port" {
   description = "ALB listener port"
   type        = number
-  default     = 443
 }
 
 variable "ecs_alb_certificate_arn" {
@@ -118,7 +131,6 @@ variable "ecs_alb_certificate_arn" {
 variable "ecs_alb_ssl_policy" {
   description = "SSL policy for HTTPS ALB listener"
   type        = string
-  default     = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 }
 
 variable "backend_image" {

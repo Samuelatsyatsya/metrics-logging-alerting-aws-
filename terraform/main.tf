@@ -18,8 +18,12 @@ module "network" {
   source = "./modules/network"
 
   project_name                   = var.project_name
-  vpc_id                         = var.vpc_id
-  subnet_ids                     = var.subnet_ids
+  vpc_cidr_block                 = var.network_vpc_cidr_block
+  public_subnet_cidr_blocks      = var.network_public_subnet_cidr_blocks
+  public_subnet_azs              = var.network_public_subnet_azs
+  map_public_ip_on_launch        = var.network_map_public_ip_on_launch
+  enable_dns_support             = var.network_enable_dns_support
+  enable_dns_hostnames           = var.network_enable_dns_hostnames
   frontend_container_port        = var.ecs_frontend_container_port
   health_check_path              = var.ecs_health_check_path
   alb_internal                   = var.ecs_alb_internal

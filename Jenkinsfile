@@ -9,6 +9,8 @@ pipeline {
         AWS_REGION = credentials('AWS_REGION')
         AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        ECS_CLUSTER = credentials('ECS_CLUSTER')
+        ECS_SERVICE = credentials('ECS_SERVICE')
         ECR_BACKEND_REPO = credentials('ECR_BACKEND_REPO')
         ECR_FRONTEND_REPO = credentials('ECR_FRONTEND_REPO')
         VITE_API_URL = credentials('VITE_API_URL')
