@@ -1,0 +1,9 @@
+# Trivy misconfiguration exceptions for this project.
+# Keep this file minimal and review exceptions regularly.
+
+# AWS-0053: ALB is intentionally internet-facing for public application access.
+AWS-0053
+
+# AWS-0054: HTTP listener is temporarily accepted in this environment
+# while TLS/certificate management is being finalized.
+AWS-0054

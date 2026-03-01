@@ -130,7 +130,7 @@ resource "aws_lb" "main" {
   load_balancer_type         = "application"
   security_groups            = [aws_security_group.alb.id]
   subnets                    = [for key in sort(keys(aws_subnet.public)) : aws_subnet.public[key].id]
-  drop_invalid_header_fields = var.alb_drop_invalid_header_fields
+  drop_invalid_header_fields = true
 
   tags = var.tags
 }
