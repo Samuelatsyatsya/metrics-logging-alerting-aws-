@@ -2,7 +2,6 @@ locals {
   alb_name                   = "${var.project_name}-alb"
   target_group_name          = substr("${var.project_name}-frontend-tg", 0, 32)
   effective_alb_egress_cidrs = length(var.alb_egress_cidr_blocks) > 0 ? var.alb_egress_cidr_blocks : [aws_vpc.main.cidr_block]
-  effective_ecs_egress_cidrs = length(var.ecs_service_egress_cidr_blocks) > 0 ? var.ecs_service_egress_cidr_blocks : [aws_vpc.main.cidr_block]
   public_subnet_map = {
     for index, cidr in var.public_subnet_cidr_blocks :
     index => {
@@ -116,7 +115,7 @@ resource "aws_security_group" "ecs_service" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = local.effective_ecs_egress_cidrs
+    cidr_blocks = var.ecs_service_egress_cidr_blocks
   }
 
   tags = merge(var.tags, {

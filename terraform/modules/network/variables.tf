@@ -74,8 +74,13 @@ variable "alb_egress_cidr_blocks" {
 }
 
 variable "ecs_service_egress_cidr_blocks" {
-  description = "CIDR blocks allowed as ECS task egress. If empty, module uses VPC CIDR."
+  description = "CIDR blocks allowed as ECS task egress."
   type        = list(string)
+
+  validation {
+    condition     = length(var.ecs_service_egress_cidr_blocks) > 0
+    error_message = "ecs_service_egress_cidr_blocks must contain at least one CIDR (for example [\"0.0.0.0/0\"])."
+  }
 }
 
 variable "alb_listener_port" {
