@@ -63,6 +63,25 @@ module "ecs" {
   depends_on = [module.network]
 }
 
+module "jenkins_iam" {
+  count  = var.enable_ecs && var.enable_jenkins_iam_policy ? 1 : 0
+  source = "./modules/jenkins_iam"
+
+  project_name     = var.project_name
+  aws_region       = var.aws_region
+  ecs_cluster_name = module.ecs[0].cluster_name
+  ecs_service_name = module.ecs[0].service_name
+  pass_role_arns = [
+    module.ecs[0].task_execution_role_arn,
+    module.ecs[0].task_role_arn
+  ]
+  principal_type = var.jenkins_iam_principal_type
+  principal_name = var.jenkins_iam_principal_name
+  tags           = var.tags
+
+  depends_on = [module.ecs]
+}
+
 moved {
   from = module.ecs[0].aws_security_group.alb
   to   = module.network[0].aws_security_group.alb

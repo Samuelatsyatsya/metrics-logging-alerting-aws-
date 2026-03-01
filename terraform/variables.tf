@@ -18,6 +18,26 @@ variable "enable_ecs" {
   type        = bool
 }
 
+variable "enable_jenkins_iam_policy" {
+  description = "Whether to create and attach Jenkins ECS deployment IAM policy"
+  type        = bool
+}
+
+variable "jenkins_iam_principal_type" {
+  description = "IAM principal type Jenkins uses (user or role)"
+  type        = string
+
+  validation {
+    condition     = contains(["user", "role"], var.jenkins_iam_principal_type)
+    error_message = "jenkins_iam_principal_type must be either 'user' or 'role'."
+  }
+}
+
+variable "jenkins_iam_principal_name" {
+  description = "IAM user/role name Jenkins uses"
+  type        = string
+}
+
 variable "network_vpc_cidr_block" {
   description = "CIDR block for the VPC created by the network module"
   type        = string

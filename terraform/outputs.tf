@@ -22,3 +22,8 @@ output "app_healthcheck_url" {
   description = "Health check URL for Jenkins APP_HEALTHCHECK_URL"
   value       = try("http://${module.network[0].alb_dns_name}${var.ecs_health_check_path}", null)
 }
+
+output "jenkins_ecs_deploy_policy_arn" {
+  description = "IAM policy ARN attached to Jenkins principal for ECS deploy operations"
+  value       = try(module.jenkins_iam[0].policy_arn, null)
+}
