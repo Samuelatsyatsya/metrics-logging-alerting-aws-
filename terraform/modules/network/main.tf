@@ -1,6 +1,5 @@
 locals {
   alb_name                   = "${var.project_name}-alb"
-  target_group_name          = substr("${var.project_name}-frontend-tg", 0, 32)
   effective_alb_egress_cidrs = length(var.alb_egress_cidr_blocks) > 0 ? var.alb_egress_cidr_blocks : [aws_vpc.main.cidr_block]
   public_subnet_map = {
     for index, cidr in var.public_subnet_cidr_blocks :
@@ -135,11 +134,17 @@ resource "aws_lb" "main" {
 }
 
 resource "aws_lb_target_group" "frontend" {
-  name        = local.target_group_name
+  # Use name_prefix + create_before_destroy so target group replacements
+  # (for example port updates) don't fail while still attached to listener.
+  name_prefix = "ftg-"
   port        = var.frontend_container_port
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = aws_vpc.main.id
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   health_check {
     path                = var.health_check_path
