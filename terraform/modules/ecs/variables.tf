@@ -78,6 +78,11 @@ variable "backend_env" {
   type        = map(string)
 }
 
+variable "backend_secrets" {
+  description = "Secrets for backend container (name => valueFrom)"
+  type        = map(string)
+}
+
 variable "frontend_env" {
   description = "Environment variables for frontend container"
   type        = map(string)

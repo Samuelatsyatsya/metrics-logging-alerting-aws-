@@ -1,8 +1,9 @@
 locals {
-  service_name         = "${var.project_name}-service"
-  cluster_name         = "${var.project_name}-cluster"
-  backend_environment  = [for key, value in var.backend_env : { name = key, value = value }]
-  frontend_environment = [for key, value in var.frontend_env : { name = key, value = value }]
+  service_name          = "${var.project_name}-service"
+  cluster_name          = "${var.project_name}-cluster"
+  backend_environment   = [for key, value in var.backend_env : { name = key, value = value }]
+  backend_secret_values = [for key, value in var.backend_secrets : { name = key, valueFrom = value }]
+  frontend_environment  = [for key, value in var.frontend_env : { name = key, value = value }]
 }
 
 data "aws_iam_policy_document" "ecs_task_assume_role" {
@@ -86,6 +87,7 @@ resource "aws_ecs_task_definition" "app" {
           value = tostring(var.backend_container_port)
         }
       ])
+      secrets = local.backend_secret_values
       logConfiguration = {
         logDriver = "awslogs"
         options = {

@@ -13,6 +13,20 @@ provider "aws" {
   region = var.aws_region
 }
 
+locals {
+  backend_env_for_ecs = var.enable_ecs && var.enable_rds ? merge(var.ecs_backend_env, {
+    DB_HOST    = module.rds[0].endpoint
+    DB_PORT    = tostring(var.rds_db_port)
+    DB_NAME    = var.rds_db_name
+    DB_USER    = var.rds_db_username
+    DB_DIALECT = "mysql"
+  }) : var.ecs_backend_env
+
+  backend_secrets_for_ecs = var.enable_ecs && var.enable_rds ? {
+    DB_PASSWORD = "${module.rds[0].credentials_secret_arn}:password::"
+  } : {}
+}
+
 module "network" {
   count  = var.enable_ecs ? 1 : 0
   source = "./modules/network"
@@ -37,6 +51,35 @@ module "network" {
   tags                           = var.tags
 }
 
+module "rds" {
+  count  = var.enable_ecs && var.enable_rds ? 1 : 0
+  source = "./modules/rds"
+
+  project_name                  = var.project_name
+  subnet_ids                    = module.network[0].subnet_ids
+  vpc_id                        = module.network[0].vpc_id
+  ecs_service_security_group_id = module.network[0].ecs_service_security_group_id
+  db_identifier                 = var.rds_db_identifier
+  db_name                       = var.rds_db_name
+  db_username                   = var.rds_db_username
+  db_password                   = var.rds_db_password
+  db_port                       = var.rds_db_port
+  engine_version                = var.rds_engine_version
+  instance_class                = var.rds_instance_class
+  allocated_storage             = var.rds_allocated_storage
+  max_allocated_storage         = var.rds_max_allocated_storage
+  storage_type                  = var.rds_storage_type
+  multi_az                      = var.rds_multi_az
+  publicly_accessible           = var.rds_publicly_accessible
+  backup_retention_period       = var.rds_backup_retention_period
+  deletion_protection           = var.rds_deletion_protection
+  skip_final_snapshot           = var.rds_skip_final_snapshot
+  credentials_secret_name       = var.rds_credentials_secret_name
+  tags                          = var.tags
+
+  depends_on = [module.network]
+}
+
 module "ecs" {
   count  = var.enable_ecs ? 1 : 0
   source = "./modules/ecs"
@@ -54,13 +97,14 @@ module "ecs" {
   frontend_container_name   = var.ecs_frontend_container_name
   backend_container_port    = var.ecs_backend_container_port
   frontend_container_port   = var.ecs_frontend_container_port
-  backend_env               = var.ecs_backend_env
+  backend_env               = local.backend_env_for_ecs
+  backend_secrets           = local.backend_secrets_for_ecs
   frontend_env              = var.ecs_frontend_env
   backend_image             = var.backend_image
   frontend_image            = var.frontend_image
   tags                      = var.tags
 
-  depends_on = [module.network]
+  depends_on = [module.network, module.rds]
 }
 
 module "jenkins_iam" {

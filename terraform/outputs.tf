@@ -13,6 +13,16 @@ output "ecs_task_definition_family" {
   value       = try(module.ecs[0].task_definition_family, null)
 }
 
+output "rds_endpoint" {
+  description = "RDS endpoint used by backend service"
+  value       = try(module.rds[0].endpoint, null)
+}
+
+output "rds_credentials_secret_arn" {
+  description = "Secrets Manager ARN used by ECS backend for DB password"
+  value       = try(module.rds[0].credentials_secret_arn, null)
+}
+
 output "ecs_alb_dns_name" {
   description = "ECS ALB DNS name"
   value       = try(module.network[0].alb_dns_name, null)

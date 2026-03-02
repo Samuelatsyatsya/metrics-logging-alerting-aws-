@@ -108,6 +108,92 @@ variable "ecs_frontend_container_port" {
   type        = number
 }
 
+variable "enable_rds" {
+  description = "Whether to provision RDS infrastructure for backend database"
+  type        = bool
+}
+
+variable "rds_db_identifier" {
+  description = "RDS instance identifier"
+  type        = string
+}
+
+variable "rds_db_name" {
+  description = "RDS initial database name"
+  type        = string
+}
+
+variable "rds_db_username" {
+  description = "RDS master username"
+  type        = string
+}
+
+variable "rds_db_password" {
+  description = "RDS master password"
+  type        = string
+  sensitive   = true
+}
+
+variable "rds_db_port" {
+  description = "RDS port"
+  type        = number
+}
+
+variable "rds_engine_version" {
+  description = "RDS MySQL engine version"
+  type        = string
+}
+
+variable "rds_instance_class" {
+  description = "RDS instance class"
+  type        = string
+}
+
+variable "rds_allocated_storage" {
+  description = "RDS allocated storage in GB"
+  type        = number
+}
+
+variable "rds_max_allocated_storage" {
+  description = "RDS max autoscaled storage in GB"
+  type        = number
+}
+
+variable "rds_storage_type" {
+  description = "RDS storage type"
+  type        = string
+}
+
+variable "rds_multi_az" {
+  description = "Whether RDS should be deployed in Multi-AZ mode"
+  type        = bool
+}
+
+variable "rds_publicly_accessible" {
+  description = "Whether RDS should be publicly accessible"
+  type        = bool
+}
+
+variable "rds_backup_retention_period" {
+  description = "RDS backup retention period in days"
+  type        = number
+}
+
+variable "rds_deletion_protection" {
+  description = "Whether to enable RDS deletion protection"
+  type        = bool
+}
+
+variable "rds_skip_final_snapshot" {
+  description = "Whether to skip RDS final snapshot on destroy"
+  type        = bool
+}
+
+variable "rds_credentials_secret_name" {
+  description = "Secrets Manager secret name storing DB credentials"
+  type        = string
+}
+
 variable "ecs_health_check_path" {
   description = "HTTP path used by ALB target group health checks"
   type        = string
