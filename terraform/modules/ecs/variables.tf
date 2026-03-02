@@ -83,6 +83,11 @@ variable "backend_secrets" {
   type        = map(string)
 }
 
+variable "backend_secret_arns" {
+  description = "Secrets Manager secret ARNs the ECS execution role can read"
+  type        = list(string)
+}
+
 variable "frontend_env" {
   description = "Environment variables for frontend container"
   type        = map(string)

@@ -25,6 +25,10 @@ locals {
   backend_secrets_for_ecs = var.enable_ecs && var.enable_rds ? {
     DB_PASSWORD = "${module.rds[0].credentials_secret_arn}:password::"
   } : {}
+
+  backend_secret_arns_for_ecs = var.enable_ecs && var.enable_rds ? [
+    module.rds[0].credentials_secret_arn
+  ] : []
 }
 
 module "network" {
@@ -99,6 +103,7 @@ module "ecs" {
   frontend_container_port   = var.ecs_frontend_container_port
   backend_env               = local.backend_env_for_ecs
   backend_secrets           = local.backend_secrets_for_ecs
+  backend_secret_arns       = local.backend_secret_arns_for_ecs
   frontend_env              = var.ecs_frontend_env
   backend_image             = var.backend_image
   frontend_image            = var.frontend_image

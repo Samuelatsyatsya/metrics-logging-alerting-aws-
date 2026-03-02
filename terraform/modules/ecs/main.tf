@@ -31,6 +31,27 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+data "aws_iam_policy_document" "ecs_task_execution_secrets" {
+  count = length(var.backend_secret_arns) > 0 ? 1 : 0
+
+  statement {
+    sid    = "AllowReadBackendSecrets"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue"
+    ]
+    resources = var.backend_secret_arns
+  }
+}
+
+resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
+  count = length(var.backend_secret_arns) > 0 ? 1 : 0
+
+  name   = "${var.project_name}-ecs-task-execution-secrets"
+  role   = aws_iam_role.ecs_task_execution.id
+  policy = data.aws_iam_policy_document.ecs_task_execution_secrets[0].json
+}
+
 resource "aws_iam_role" "ecs_task" {
   name               = "${var.project_name}-ecs-task-role"
   assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
