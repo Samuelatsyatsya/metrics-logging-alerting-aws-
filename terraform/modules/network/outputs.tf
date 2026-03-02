@@ -13,6 +13,11 @@ output "frontend_target_group_arn" {
   value       = aws_lb_target_group.frontend.arn
 }
 
+output "frontend_target_group_name" {
+  description = "Target group name for frontend service"
+  value       = aws_lb_target_group.frontend.name
+}
+
 output "ecs_service_security_group_id" {
   description = "Security group ID to attach to ECS service tasks"
   value       = aws_security_group.ecs_service.id
@@ -26,4 +31,9 @@ output "alb_dns_name" {
 output "alb_arn" {
   description = "ARN of the application load balancer"
   value       = aws_lb.main.arn
+}
+
+output "alb_listener_arn" {
+  description = "ARN of the production ALB listener"
+  value       = aws_lb_listener.https.arn
 }

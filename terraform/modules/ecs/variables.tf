@@ -23,6 +23,11 @@ variable "frontend_target_group_arn" {
   type        = string
 }
 
+variable "deployment_controller_type" {
+  description = "ECS deployment controller type (ECS or CODE_DEPLOY)"
+  type        = string
+}
+
 variable "assign_public_ip" {
   description = "Whether to assign a public IP to ECS tasks"
   type        = bool

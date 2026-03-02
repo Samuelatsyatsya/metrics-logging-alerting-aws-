@@ -37,3 +37,13 @@ output "jenkins_ecs_deploy_policy_arn" {
   description = "IAM policy ARN attached to Jenkins principal for ECS deploy operations"
   value       = try(module.jenkins_iam[0].policy_arn, null)
 }
+
+output "codedeploy_application_name" {
+  description = "CodeDeploy application name for ECS blue/green deployments"
+  value       = try(module.codedeploy[0].application_name, null)
+}
+
+output "codedeploy_deployment_group_name" {
+  description = "CodeDeploy deployment group name for ECS blue/green deployments"
+  value       = try(module.codedeploy[0].deployment_group_name, null)
+}

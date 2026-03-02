@@ -751,24 +751,104 @@ pipeline {
                             -e AWS_DEFAULT_REGION="${AWS_REGION}" \
                             -e ECS_CLUSTER="${ECS_CLUSTER}" \
                             -e ECS_SERVICE="${ECS_SERVICE}" \
+                            -e ECS_DEPLOYMENT_STRATEGY="${ECS_DEPLOYMENT_STRATEGY:-ROLLING}" \
+                            -e CODEDEPLOY_APPLICATION_NAME="${CODEDEPLOY_APPLICATION_NAME:-}" \
+                            -e CODEDEPLOY_DEPLOYMENT_GROUP="${CODEDEPLOY_DEPLOYMENT_GROUP:-}" \
+                            -e ECS_FRONTEND_CONTAINER_NAME="${ECS_FRONTEND_CONTAINER_NAME:-frontend}" \
+                            -e ECS_FRONTEND_CONTAINER_PORT="${ECS_FRONTEND_CONTAINER_PORT:-${FRONTEND_PORT:-80}}" \
+                            -e BUILD_NUMBER="${BUILD_NUMBER}" \
+                            -e IMAGE_TAG="${IMAGE_TAG}" \
                             -w /workspace \
                             "${AWS_CLI_IMAGE}" \
                             -lc '
                                 set -e
                                 NEW_TASKDEF_ARN="$(cat /workspace/new_taskdef_arn.txt)"
-                                aws ecs update-service --cluster "${ECS_CLUSTER}" --service "${ECS_SERVICE}" --task-definition "${NEW_TASKDEF_ARN}" > /workspace/ecs-service-update.json
-                                set +e
-                                aws ecs wait services-stable --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}"
-                                WAIT_EXIT_CODE=$?
-                                set -e
+                                DEPLOYMENT_STRATEGY="$(echo "${ECS_DEPLOYMENT_STRATEGY:-ROLLING}" | tr "[:lower:]" "[:upper:]")"
+                                WAIT_EXIT_CODE=0
+
+                                if [ "${DEPLOYMENT_STRATEGY}" = "CODE_DEPLOY" ] || [ "${DEPLOYMENT_STRATEGY}" = "BLUE_GREEN" ]; then
+                                    if [ -z "${CODEDEPLOY_APPLICATION_NAME}" ] || [ -z "${CODEDEPLOY_DEPLOYMENT_GROUP}" ]; then
+                                        echo "ERROR: CODEDEPLOY_APPLICATION_NAME and CODEDEPLOY_DEPLOYMENT_GROUP are required for CODE_DEPLOY strategy"
+                                        exit 1
+                                    fi
+
+                                    FRONTEND_CONTAINER_NAME_VALUE="${ECS_FRONTEND_CONTAINER_NAME:-frontend}"
+                                    FRONTEND_CONTAINER_PORT_VALUE="${ECS_FRONTEND_CONTAINER_PORT:-80}"
+
+                                    cat > /workspace/appspec-content.json <<EOF
+{
+  "version": 1,
+  "Resources": [
+    {
+      "TargetService": {
+        "Type": "AWS::ECS::Service",
+        "Properties": {
+          "TaskDefinition": "${NEW_TASKDEF_ARN}",
+          "LoadBalancerInfo": {
+            "ContainerName": "${FRONTEND_CONTAINER_NAME_VALUE}",
+            "ContainerPort": ${FRONTEND_CONTAINER_PORT_VALUE}
+          }
+        }
+      }
+    }
+  ]
+}
+EOF
+                                    APPSPEC_ESCAPED="$(tr -d "\n" < /workspace/appspec-content.json | sed "s/\"/\\\\\"/g")"
+
+                                    cat > /workspace/codedeploy-create-deployment.json <<EOF
+{
+  "applicationName": "${CODEDEPLOY_APPLICATION_NAME}",
+  "deploymentGroupName": "${CODEDEPLOY_DEPLOYMENT_GROUP}",
+  "description": "Jenkins build ${BUILD_NUMBER} image ${IMAGE_TAG}",
+  "ignoreApplicationStopFailures": true,
+  "revision": {
+    "revisionType": "AppSpecContent",
+    "appSpecContent": {
+      "content": "${APPSPEC_ESCAPED}"
+    }
+  }
+}
+EOF
+
+                                    DEPLOYMENT_ID="$(aws deploy create-deployment --cli-input-json file:///workspace/codedeploy-create-deployment.json --query "deploymentId" --output text)"
+                                    echo "${DEPLOYMENT_ID}" > /workspace/codedeploy-deployment-id.txt
+
+                                    set +e
+                                    aws deploy wait deployment-successful --deployment-id "${DEPLOYMENT_ID}"
+                                    WAIT_EXIT_CODE=$?
+                                    set -e
+
+                                    aws deploy get-deployment \
+                                      --deployment-id "${DEPLOYMENT_ID}" \
+                                      --query "deploymentInfo.[deploymentId,status,createTime,completeTime,errorInformation]" \
+                                      --output table > /workspace/codedeploy-deployment-status.txt || true
+                                else
+                                    aws ecs update-service --cluster "${ECS_CLUSTER}" --service "${ECS_SERVICE}" --task-definition "${NEW_TASKDEF_ARN}" > /workspace/ecs-service-update.json
+                                    set +e
+                                    aws ecs wait services-stable --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}"
+                                    WAIT_EXIT_CODE=$?
+                                    set -e
+                                fi
+
                                 aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query "services[0].[status,desiredCount,runningCount,pendingCount,taskDefinition]" --output table > /workspace/ecs-service-status.txt
                                 aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query "services[0].events[0:10].[createdAt,message]" --output table > /workspace/ecs-service-events.txt
 
                                 if [ "${WAIT_EXIT_CODE}" -ne 0 ]; then
-                                    aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query "services[0].deployments[*].[id,status,rolloutState,rolloutStateReason,desiredCount,pendingCount,runningCount,taskDefinition]" --output table > /workspace/ecs-service-deployments.txt || true
-                                    STOPPED_TASKS="$(aws ecs list-tasks --cluster "${ECS_CLUSTER}" --service-name "${ECS_SERVICE}" --desired-status STOPPED --max-items 10 --query "taskArns" --output text)" || true
-                                    if [ -n "${STOPPED_TASKS}" ] && [ "${STOPPED_TASKS}" != "None" ]; then
-                                        aws ecs describe-tasks --cluster "${ECS_CLUSTER}" --tasks ${STOPPED_TASKS} --query "tasks[*].[taskArn,lastStatus,desiredStatus,stoppedReason,containers[0].reason]" --output table > /workspace/ecs-stopped-tasks.txt || true
+                                    if [ "${DEPLOYMENT_STRATEGY}" = "CODE_DEPLOY" ] || [ "${DEPLOYMENT_STRATEGY}" = "BLUE_GREEN" ]; then
+                                        if [ -f /workspace/codedeploy-deployment-id.txt ]; then
+                                            DEPLOYMENT_ID="$(cat /workspace/codedeploy-deployment-id.txt)"
+                                            aws deploy get-deployment \
+                                              --deployment-id "${DEPLOYMENT_ID}" \
+                                              --query "deploymentInfo.[deploymentId,status,errorInformation,createTime,completeTime]" \
+                                              --output table > /workspace/codedeploy-deployment-status.txt || true
+                                        fi
+                                    else
+                                        aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query "services[0].deployments[*].[id,status,rolloutState,rolloutStateReason,desiredCount,pendingCount,runningCount,taskDefinition]" --output table > /workspace/ecs-service-deployments.txt || true
+                                        STOPPED_TASKS="$(aws ecs list-tasks --cluster "${ECS_CLUSTER}" --service-name "${ECS_SERVICE}" --desired-status STOPPED --max-items 10 --query "taskArns" --output text)" || true
+                                        if [ -n "${STOPPED_TASKS}" ] && [ "${STOPPED_TASKS}" != "None" ]; then
+                                            aws ecs describe-tasks --cluster "${ECS_CLUSTER}" --tasks ${STOPPED_TASKS} --query "tasks[*].[taskArn,lastStatus,desiredStatus,stoppedReason,containers[0].reason]" --output table > /workspace/ecs-stopped-tasks.txt || true
+                                        fi
                                     fi
                                     exit "${WAIT_EXIT_CODE}"
                                 fi
@@ -783,6 +863,8 @@ pipeline {
                         docker cp "${UPDATE_CONTAINER}:/workspace/ecs-service-events.txt" "${WORKSPACE}/ecs-service-events.txt" || true
                         docker cp "${UPDATE_CONTAINER}:/workspace/ecs-service-deployments.txt" "${WORKSPACE}/ecs-service-deployments.txt" || true
                         docker cp "${UPDATE_CONTAINER}:/workspace/ecs-stopped-tasks.txt" "${WORKSPACE}/ecs-stopped-tasks.txt" || true
+                        docker cp "${UPDATE_CONTAINER}:/workspace/codedeploy-deployment-id.txt" "${WORKSPACE}/codedeploy-deployment-id.txt" || true
+                        docker cp "${UPDATE_CONTAINER}:/workspace/codedeploy-deployment-status.txt" "${WORKSPACE}/codedeploy-deployment-status.txt" || true
 
                         echo "ECS service status:"
                         cat "${WORKSPACE}/ecs-service-status.txt"
@@ -797,6 +879,14 @@ pipeline {
                         if [ -f "${WORKSPACE}/ecs-stopped-tasks.txt" ]; then
                             echo "Recently stopped ECS tasks:"
                             cat "${WORKSPACE}/ecs-stopped-tasks.txt"
+                        fi
+                        if [ -f "${WORKSPACE}/codedeploy-deployment-id.txt" ]; then
+                            echo "CodeDeploy deployment id:"
+                            cat "${WORKSPACE}/codedeploy-deployment-id.txt"
+                        fi
+                        if [ -f "${WORKSPACE}/codedeploy-deployment-status.txt" ]; then
+                            echo "CodeDeploy deployment status:"
+                            cat "${WORKSPACE}/codedeploy-deployment-status.txt"
                         fi
                         if [ "${UPDATE_EXIT_CODE}" -ne 0 ]; then
                             echo "ERROR: ECS service did not stabilize (exit code ${UPDATE_EXIT_CODE})"
@@ -878,6 +968,147 @@ pipeline {
                             fi
                         else
                             echo "APP_HEALTHCHECK_URL not set, skipping HTTP endpoint check"
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Verify CloudWatch Logs and Alarms') {
+            steps {
+                script {
+                    sh '''
+                        if [ -z "${ECS_CLUSTER:-}" ] || [ -z "${ECS_SERVICE:-}" ]; then
+                            echo "ERROR: ECS_CLUSTER and ECS_SERVICE environment variables are required"
+                            exit 1
+                        fi
+
+                        AWS_CLI_IMAGE=""
+                        for CANDIDATE in public.ecr.aws/aws-cli/aws-cli:latest amazon/aws-cli:latest; do
+                            if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
+                                AWS_CLI_IMAGE="${CANDIDATE}"
+                                break
+                            fi
+                        done
+
+                        if [ -z "${AWS_CLI_IMAGE}" ]; then
+                            echo "ERROR: Unable to pull a supported AWS CLI image"
+                            exit 1
+                        fi
+
+                        VERIFY_CONTAINER=""
+                        cleanup() {
+                            if [ -n "${VERIFY_CONTAINER}" ]; then
+                                docker rm -f "${VERIFY_CONTAINER}" >/dev/null 2>&1 || true
+                            fi
+                        }
+                        trap cleanup EXIT
+
+                        VERIFY_CONTAINER="$(docker create \
+                            --entrypoint sh \
+                            -e AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+                            -e AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+                            -e AWS_SESSION_TOKEN="${AWS_SESSION_TOKEN:-}" \
+                            -e AWS_DEFAULT_REGION="${AWS_REGION}" \
+                            -e ECS_CLUSTER="${ECS_CLUSTER}" \
+                            -e ECS_SERVICE="${ECS_SERVICE}" \
+                            -e CLOUDWATCH_ALARM_PREFIX="${CLOUDWATCH_ALARM_PREFIX:-Project-Monitoring}" \
+                            -e REQUIRE_MONITORING_ALARMS="${REQUIRE_MONITORING_ALARMS:-false}" \
+                            -w /workspace \
+                            "${AWS_CLI_IMAGE}" \
+                            -lc '
+                                set -e
+                                CURRENT_TASKDEF_ARN="$(aws ecs describe-services --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" --query "services[0].taskDefinition" --output text)"
+                                if [ -z "${CURRENT_TASKDEF_ARN}" ] || [ "${CURRENT_TASKDEF_ARN}" = "None" ]; then
+                                    echo "ERROR: Could not resolve current task definition from ECS service"
+                                    exit 1
+                                fi
+
+                                aws ecs describe-task-definition \
+                                  --task-definition "${CURRENT_TASKDEF_ARN}" \
+                                  --query "taskDefinition.containerDefinitions[].{name:name,logGroup:logConfiguration.options.\"awslogs-group\",streamPrefix:logConfiguration.options.\"awslogs-stream-prefix\"}" \
+                                  --output table > /workspace/ecs-log-config.txt
+
+                                LOG_GROUPS="$(aws ecs describe-task-definition \
+                                  --task-definition "${CURRENT_TASKDEF_ARN}" \
+                                  --query "taskDefinition.containerDefinitions[].logConfiguration.options.\"awslogs-group\"" \
+                                  --output text)"
+
+                                if [ -z "${LOG_GROUPS}" ] || [ "${LOG_GROUPS}" = "None" ]; then
+                                    echo "ERROR: No CloudWatch log groups found in task definition logConfiguration"
+                                    exit 1
+                                fi
+
+                                : > /workspace/cloudwatch-log-streams.txt
+                                MISSING_STREAMS=0
+                                for LOG_GROUP in ${LOG_GROUPS}; do
+                                    echo "Log group: ${LOG_GROUP}" >> /workspace/cloudwatch-log-streams.txt
+                                    STREAM_INFO="$(aws logs describe-log-streams \
+                                      --log-group-name "${LOG_GROUP}" \
+                                      --order-by LastEventTime \
+                                      --descending \
+                                      --max-items 1 \
+                                      --query "logStreams[0].[logStreamName,lastEventTimestamp]" \
+                                      --output text 2>/dev/null || true)"
+
+                                    if [ -z "${STREAM_INFO}" ] || [ "${STREAM_INFO}" = "None" ] || [ "${STREAM_INFO}" = "None	None" ]; then
+                                        echo "  NO_LOG_STREAMS_FOUND" >> /workspace/cloudwatch-log-streams.txt
+                                        MISSING_STREAMS=1
+                                    else
+                                        echo "  ${STREAM_INFO}" >> /workspace/cloudwatch-log-streams.txt
+                                    fi
+                                done
+
+                                if [ "${MISSING_STREAMS}" -ne 0 ]; then
+                                    echo "ERROR: One or more container log groups have no log streams yet"
+                                    exit 1
+                                fi
+
+                                ALARM_PREFIX="${CLOUDWATCH_ALARM_PREFIX:-Project-Monitoring}"
+                                aws cloudwatch describe-alarms \
+                                  --alarm-name-prefix "${ALARM_PREFIX}" \
+                                  --query "MetricAlarms[].{AlarmName:AlarmName,StateValue:StateValue,StateUpdatedTimestamp:StateUpdatedTimestamp}" \
+                                  --output table > /workspace/cloudwatch-alarms.txt
+
+                                ALARM_COUNT="$(aws cloudwatch describe-alarms --alarm-name-prefix "${ALARM_PREFIX}" --query "length(MetricAlarms)" --output text)"
+                                if [ "${ALARM_COUNT}" = "0" ] || [ -z "${ALARM_COUNT}" ]; then
+                                    if [ "${REQUIRE_MONITORING_ALARMS}" = "true" ]; then
+                                        echo "ERROR: No CloudWatch alarms found with prefix ${ALARM_PREFIX}"
+                                        exit 1
+                                    fi
+                                    echo "WARNING: No CloudWatch alarms found with prefix ${ALARM_PREFIX}" > /workspace/cloudwatch-alarms-warning.txt
+                                fi
+                            ')"
+
+                        set +e
+                        docker start -a "${VERIFY_CONTAINER}"
+                        VERIFY_EXIT_CODE=$?
+                        set -e
+
+                        docker cp "${VERIFY_CONTAINER}:/workspace/ecs-log-config.txt" "${WORKSPACE}/ecs-log-config.txt" || true
+                        docker cp "${VERIFY_CONTAINER}:/workspace/cloudwatch-log-streams.txt" "${WORKSPACE}/cloudwatch-log-streams.txt" || true
+                        docker cp "${VERIFY_CONTAINER}:/workspace/cloudwatch-alarms.txt" "${WORKSPACE}/cloudwatch-alarms.txt" || true
+                        docker cp "${VERIFY_CONTAINER}:/workspace/cloudwatch-alarms-warning.txt" "${WORKSPACE}/cloudwatch-alarms-warning.txt" || true
+
+                        if [ -f "${WORKSPACE}/ecs-log-config.txt" ]; then
+                            echo "Task definition CloudWatch log configuration:"
+                            cat "${WORKSPACE}/ecs-log-config.txt"
+                        fi
+                        if [ -f "${WORKSPACE}/cloudwatch-log-streams.txt" ]; then
+                            echo "CloudWatch log stream activity:"
+                            cat "${WORKSPACE}/cloudwatch-log-streams.txt"
+                        fi
+                        if [ -f "${WORKSPACE}/cloudwatch-alarms.txt" ]; then
+                            echo "CloudWatch alarms (Project-Monitoring):"
+                            cat "${WORKSPACE}/cloudwatch-alarms.txt"
+                        fi
+                        if [ -f "${WORKSPACE}/cloudwatch-alarms-warning.txt" ]; then
+                            cat "${WORKSPACE}/cloudwatch-alarms-warning.txt"
+                        fi
+
+                        if [ "${VERIFY_EXIT_CODE}" -ne 0 ]; then
+                            echo "ERROR: CloudWatch verification failed (exit code ${VERIFY_EXIT_CODE})"
+                            exit "${VERIFY_EXIT_CODE}"
                         fi
                     '''
                 }

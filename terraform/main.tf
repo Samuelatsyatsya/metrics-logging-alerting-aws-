@@ -88,26 +88,27 @@ module "ecs" {
   count  = var.enable_ecs ? 1 : 0
   source = "./modules/ecs"
 
-  project_name              = var.project_name
-  aws_region                = var.aws_region
-  subnet_ids                = module.network[0].subnet_ids
-  service_security_group_id = module.network[0].ecs_service_security_group_id
-  frontend_target_group_arn = module.network[0].frontend_target_group_arn
-  assign_public_ip          = var.ecs_assign_public_ip
-  desired_count             = var.ecs_desired_count
-  task_cpu                  = var.ecs_task_cpu
-  task_memory               = var.ecs_task_memory
-  backend_container_name    = var.ecs_backend_container_name
-  frontend_container_name   = var.ecs_frontend_container_name
-  backend_container_port    = var.ecs_backend_container_port
-  frontend_container_port   = var.ecs_frontend_container_port
-  backend_env               = local.backend_env_for_ecs
-  backend_secrets           = local.backend_secrets_for_ecs
-  backend_secret_arns       = local.backend_secret_arns_for_ecs
-  frontend_env              = var.ecs_frontend_env
-  backend_image             = var.backend_image
-  frontend_image            = var.frontend_image
-  tags                      = var.tags
+  project_name               = var.project_name
+  aws_region                 = var.aws_region
+  subnet_ids                 = module.network[0].subnet_ids
+  service_security_group_id  = module.network[0].ecs_service_security_group_id
+  frontend_target_group_arn  = module.network[0].frontend_target_group_arn
+  deployment_controller_type = var.ecs_deployment_controller_type
+  assign_public_ip           = var.ecs_assign_public_ip
+  desired_count              = var.ecs_desired_count
+  task_cpu                   = var.ecs_task_cpu
+  task_memory                = var.ecs_task_memory
+  backend_container_name     = var.ecs_backend_container_name
+  frontend_container_name    = var.ecs_frontend_container_name
+  backend_container_port     = var.ecs_backend_container_port
+  frontend_container_port    = var.ecs_frontend_container_port
+  backend_env                = local.backend_env_for_ecs
+  backend_secrets            = local.backend_secrets_for_ecs
+  backend_secret_arns        = local.backend_secret_arns_for_ecs
+  frontend_env               = var.ecs_frontend_env
+  backend_image              = var.backend_image
+  frontend_image             = var.frontend_image
+  tags                       = var.tags
 
   depends_on = [module.network, module.rds]
 }
@@ -129,6 +130,24 @@ module "jenkins_iam" {
   tags           = var.tags
 
   depends_on = [module.ecs]
+}
+
+module "codedeploy" {
+  count  = var.enable_ecs && var.enable_codedeploy ? 1 : 0
+  source = "./modules/codedeploy"
+
+  project_name            = var.project_name
+  vpc_id                  = module.network[0].vpc_id
+  frontend_container_port = var.ecs_frontend_container_port
+  health_check_path       = var.ecs_health_check_path
+  ecs_cluster_name        = module.ecs[0].cluster_name
+  ecs_service_name        = module.ecs[0].service_name
+  prod_listener_arn       = module.network[0].alb_listener_arn
+  prod_target_group_name  = module.network[0].frontend_target_group_name
+  create_deployment_group = var.codedeploy_create_deployment_group
+  tags                    = var.tags
+
+  depends_on = [module.network, module.ecs]
 }
 
 moved {

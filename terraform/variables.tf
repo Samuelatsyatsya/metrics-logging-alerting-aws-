@@ -23,6 +23,34 @@ variable "enable_jenkins_iam_policy" {
   type        = bool
 }
 
+variable "enable_codedeploy" {
+  description = "Whether to provision CodeDeploy resources for future ECS blue/green deployments"
+  type        = bool
+  default     = false
+}
+
+variable "codedeploy_create_deployment_group" {
+  description = "Whether to create the CodeDeploy deployment group. Keep false while ECS uses rolling deployments."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.codedeploy_create_deployment_group || var.ecs_deployment_controller_type == "CODE_DEPLOY"
+    error_message = "codedeploy_create_deployment_group can only be true when ecs_deployment_controller_type is CODE_DEPLOY."
+  }
+}
+
+variable "ecs_deployment_controller_type" {
+  description = "ECS service deployment controller type: ECS for rolling updates or CODE_DEPLOY for blue/green."
+  type        = string
+  default     = "ECS"
+
+  validation {
+    condition     = contains(["ECS", "CODE_DEPLOY"], var.ecs_deployment_controller_type)
+    error_message = "ecs_deployment_controller_type must be either ECS or CODE_DEPLOY."
+  }
+}
+
 variable "jenkins_iam_principal_type" {
   description = "IAM principal type Jenkins uses (user or role)"
   type        = string
