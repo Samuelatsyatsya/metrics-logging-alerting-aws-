@@ -9,6 +9,7 @@ import { metricsMiddleware } from './middleware/metricsMiddleware.js';
 import { register } from './utils/metrics.js';
 
 const app = express();
+const API_PREFIX = process.env.API_PREFIX || '/api/v1';
 
 // Security middleware
 app.use(helmet());
@@ -32,7 +33,7 @@ const limiter = rateLimit({
     message: 'Too many requests from this IP, please try again later.'
   }
 });
-app.use('/api/v1', limiter);
+app.use(API_PREFIX, limiter);
 
 // Body parsing middleware
 app.use(express.json());
@@ -58,7 +59,6 @@ app.get('/health', (req, res) => {
 });
 
 // API routes
-const API_PREFIX = process.env.API_PREFIX;
 app.use(`${API_PREFIX}/game`, gameRoutes);
 
 // Add API health endpoint
