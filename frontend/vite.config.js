@@ -3,6 +3,13 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    // Prevent duplicate React instances in bundled deps (invalid hook call in production).
+    dedupe: ['react', 'react-dom']
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom']
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,
