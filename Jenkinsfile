@@ -1029,13 +1029,17 @@ EOF
 
                                 aws ecs describe-task-definition \
                                   --task-definition "${CURRENT_TASKDEF_ARN}" \
-                                  --query "taskDefinition.containerDefinitions[].{name:name,logGroup:logConfiguration.options[\\\"awslogs-group\\\"],streamPrefix:logConfiguration.options[\\\"awslogs-stream-prefix\\\"]}" \
+                                  --query "taskDefinition.containerDefinitions[].{name:name,logDriver:logConfiguration.logDriver,logOptions:logConfiguration.options}" \
                                   --output table > /workspace/ecs-log-config.txt
 
                                 LOG_GROUPS="$(aws ecs describe-task-definition \
                                   --task-definition "${CURRENT_TASKDEF_ARN}" \
-                                  --query "taskDefinition.containerDefinitions[].logConfiguration.options[\\\"awslogs-group\\\"]" \
-                                  --output text)"
+                                  --query "taskDefinition.containerDefinitions[].logConfiguration.options" \
+                                  --output text | \
+                                  tr "\t" "\n" | \
+                                  sed -n "s/.*awslogs-group=\\([^, ]*\\).*/\\1/p" | \
+                                  sort -u | \
+                                  tr "\n" " ")"
 
                                 if [ -z "${LOG_GROUPS}" ] || [ "${LOG_GROUPS}" = "None" ]; then
                                     echo "ERROR: No CloudWatch log groups found in task definition logConfiguration"
