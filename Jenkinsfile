@@ -1029,12 +1029,12 @@ EOF
 
                                 aws ecs describe-task-definition \
                                   --task-definition "${CURRENT_TASKDEF_ARN}" \
-                                  --query "taskDefinition.containerDefinitions[].{name:name,logGroup:logConfiguration.options.\"awslogs-group\",streamPrefix:logConfiguration.options.\"awslogs-stream-prefix\"}" \
+                                  --query "taskDefinition.containerDefinitions[].{name:name,logGroup:logConfiguration.options[\\\"awslogs-group\\\"],streamPrefix:logConfiguration.options[\\\"awslogs-stream-prefix\\\"]}" \
                                   --output table > /workspace/ecs-log-config.txt
 
                                 LOG_GROUPS="$(aws ecs describe-task-definition \
                                   --task-definition "${CURRENT_TASKDEF_ARN}" \
-                                  --query "taskDefinition.containerDefinitions[].logConfiguration.options.\"awslogs-group\"" \
+                                  --query "taskDefinition.containerDefinitions[].logConfiguration.options[\\\"awslogs-group\\\"]" \
                                   --output text)"
 
                                 if [ -z "${LOG_GROUPS}" ] || [ "${LOG_GROUPS}" = "None" ]; then

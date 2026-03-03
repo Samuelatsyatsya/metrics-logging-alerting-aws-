@@ -4,17 +4,30 @@ data "aws_partition" "current" {}
 
 locals {
   ecs_service_arn = "arn:${data.aws_partition.current.partition}:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${var.ecs_cluster_name}/${var.ecs_service_name}"
+  # Some accounts still expose ECS service ARN in legacy format without cluster name.
+  ecs_service_arn_legacy = "arn:${data.aws_partition.current.partition}:ecs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:service/${var.ecs_service_name}"
 }
 
 data "aws_iam_policy_document" "jenkins_ecs_deploy" {
   statement {
-    sid    = "EcsServiceReadAndUpdate"
+    sid    = "EcsServiceRead"
     effect = "Allow"
     actions = [
-      "ecs:DescribeServices",
+      "ecs:DescribeServices"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "EcsServiceUpdate"
+    effect = "Allow"
+    actions = [
       "ecs:UpdateService"
     ]
-    resources = [local.ecs_service_arn]
+    resources = [
+      local.ecs_service_arn,
+      local.ecs_service_arn_legacy
+    ]
   }
 
   statement {
@@ -33,6 +46,16 @@ data "aws_iam_policy_document" "jenkins_ecs_deploy" {
     actions = [
       "ecs:ListTasks",
       "ecs:DescribeTasks"
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ObservabilityReadForDeployValidation"
+    effect = "Allow"
+    actions = [
+      "logs:DescribeLogStreams",
+      "cloudwatch:DescribeAlarms"
     ]
     resources = ["*"]
   }
