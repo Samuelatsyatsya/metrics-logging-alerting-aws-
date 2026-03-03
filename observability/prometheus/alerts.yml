@@ -1,0 +1,22 @@
+groups:
+  - name: rps-observability-alerts
+    rules:
+      - alert: HighErrorRate
+        expr: (sum(rate(http_server_errors_total[10m])) / clamp_min(sum(rate(http_server_requests_total[10m])), 1)) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: Error rate above 5% for 10m
+          description: Error ratio is {{ $value | humanizePercentage }} over the last 10 minutes.
+
+      - alert: HighRequestLatencyP95
+        expr: histogram_quantile(0.95, sum(rate(http_server_request_duration_seconds_bucket[10m])) by (le)) > 0.3
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: Request p95 latency above 300ms for 10m
+          description: p95 latency is {{ $value }}s for the last 10 minutes.

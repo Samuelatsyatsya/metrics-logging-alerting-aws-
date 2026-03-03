@@ -1,12 +1,13 @@
 import { User } from '../models/index.js';
 import { totalPlayers } from './metrics.js';
+import { logger } from '../observability/logger.js';
 
 export async function updatePlayerCount() {
   try {
     const count = await User.count();
     totalPlayers.set(count);
   } catch (error) {
-    console.error('Error updating player count metric:', error);
+    logger.error('player_count_metric_update_failed', { error: error.message });
   }
 }
 

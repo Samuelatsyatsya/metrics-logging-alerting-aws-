@@ -1,27 +1,35 @@
-import { httpRequestDuration, httpRequestTotal } from '../utils/metrics.js';
+import { httpRequestDuration, httpRequestErrorsTotal, httpRequestTotal } from '../utils/metrics.js';
+
+const normalizeRoute = (req) => {
+  const knownRoute = req.route?.path ? `${req.baseUrl || ''}${req.route.path}` : req.path;
+
+  return knownRoute
+    .replace(/\/[0-9]+(?=\/|$)/g, '/:id')
+    .replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ':id');
+};
 
 export const metricsMiddleware = (req, res, next) => {
-  const start = Date.now();
-  
+  const startNs = process.hrtime.bigint();
+
   res.on('finish', () => {
-    const duration = (Date.now() - start) / 1000;
-    const route = req.route?.path || req.path;
-    
-    httpRequestDuration.observe(
-      {
-        method: req.method,
-        route,
-        status_code: res.statusCode
-      },
-      duration
-    );
-    
-    httpRequestTotal.inc({
+    const durationSeconds = Number(process.hrtime.bigint() - startNs) / 1_000_000_000;
+    const route = normalizeRoute(req);
+    const statusCode = String(res.statusCode);
+    const statusClass = `${Math.floor(res.statusCode / 100)}xx`;
+    const labels = {
       method: req.method,
       route,
-      status_code: res.statusCode
-    });
+      status_code: statusCode,
+      status_class: statusClass
+    };
+
+    httpRequestDuration.observe(labels, durationSeconds);
+    httpRequestTotal.inc(labels);
+
+    if (res.statusCode >= 400) {
+      httpRequestErrorsTotal.inc(labels);
+    }
   });
-  
+
   next();
 };

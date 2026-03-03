@@ -151,6 +151,51 @@ The goal is to provide end-to-end visibility into application performance, infra
 
 All AWS resources were properly cleaned up after verification to avoid unnecess ary costs.
 
+## OpenTelemetry, RED Metrics, and Trace Correlation
+
+- Backend tracing uses OpenTelemetry auto-instrumentation for:
+- HTTP server spans (Express)
+- HTTP client spans (Node `http`/`https`)
+- DB spans (`mysql2` via Sequelize)
+- Traces are exported via OTLP HTTP to Jaeger (`http://jaeger:4318`).
+- Backend logs are structured JSON and include `trace_id` and `span_id` when a span is active.
+- RED metrics are exposed at `/metrics`:
+- `http_server_requests_total` (Rate)
+- `http_server_errors_total` (Errors)
+- `http_server_request_duration_seconds` (Duration histogram)
+
+### Local Observability Stack
+
+`docker-compose.yml` now includes:
+
+- `jaeger` (UI: `http://localhost:16686`)
+- `prometheus` (UI: `http://localhost:9090`)
+- `grafana` (UI: `http://localhost:3000`, default `admin/admin`)
+
+Grafana dashboard file:
+
+- `observability/grafana/dashboards/rps-observability.json`
+
+Prometheus alert rules:
+
+- `observability/prometheus/alerts.yml`
+- `HighErrorRate`: error rate > 5% for 10 minutes
+- `HighRequestLatencyP95`: p95 latency > 300ms for 10 minutes
+
+### Validation Flow
+
+Use the built-in script to generate load and validation errors (without adding permanent test routes):
+
+```bash
+./scripts/validate-observability.sh
+```
+
+Then verify end-to-end correlation:
+
+1. Alert state in Prometheus/Grafana
+2. Trace in Jaeger
+3. Matching JSON log by `trace_id`/`span_id` in CloudWatch or Loki
+
 ## Secret Detection and Protection (Gitleaks)
 
 This repository uses `gitleaks` to detect committed secrets and block unsafe changes.

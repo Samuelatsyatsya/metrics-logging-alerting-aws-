@@ -1,7 +1,18 @@
 import { Sequelize } from 'sequelize';
 import dotenv from 'dotenv';
+import { databaseQueryDuration } from '../utils/metrics.js';
+import { logger } from '../observability/logger.js';
 
 dotenv.config();
+
+const getQueryOperation = (sql) => {
+  if (!sql || typeof sql !== 'string') {
+    return 'UNKNOWN';
+  }
+
+  const operation = sql.trim().split(/\s+/)[0];
+  return (operation || 'UNKNOWN').toUpperCase();
+};
 
 const sequelize = new Sequelize(
   process.env.DB_NAME,
@@ -11,7 +22,22 @@ const sequelize = new Sequelize(
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
     dialect: process.env.DB_DIALECT || 'mysql',
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    benchmark: true,
+    logging: (sql, durationMs) => {
+      const operation = getQueryOperation(sql);
+
+      if (typeof durationMs === 'number') {
+        databaseQueryDuration.observe({ operation }, durationMs / 1000);
+      }
+
+      if (process.env.DB_QUERY_LOGGING === 'true') {
+        logger.debug('db_query', {
+          operation,
+          duration_ms: durationMs,
+          sql: sql?.slice(0, 400)
+        });
+      }
+    },
     pool: {
       max: 10,
       min: 0,
@@ -29,15 +55,15 @@ const sequelize = new Sequelize(
 export const testConnection = async () => {
   try {
     await sequelize.authenticate();
-    console.log('✅ Database connection established successfully.');
+    logger.info('db_connection_established');
     
     // Test with a simple query
     const [results] = await sequelize.query('SELECT 1');
-    console.log('✅ Database test query successful:', results);
+    logger.info('db_connection_test_successful', { results });
     
     return true;
   } catch (error) {
-    console.error('❌ Unable to connect to the database:', error.message);
+    logger.error('db_connection_failed', { error: error.message });
     return false;
   }
 };

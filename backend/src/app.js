@@ -6,6 +6,7 @@ import gameRoutes from './routes/game.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { HTTP_STATUS } from './config/constants.js';
 import { metricsMiddleware } from './middleware/metricsMiddleware.js';
+import { requestLoggingMiddleware } from './middleware/requestLoggingMiddleware.js';
 import { register } from './utils/metrics.js';
 
 const app = express();
@@ -38,6 +39,9 @@ app.use(API_PREFIX, limiter);
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Request-scoped logs (JSON) with request_id and trace/span correlation.
+app.use(requestLoggingMiddleware);
 
 // Metrics middleware (before routes)
 app.use(metricsMiddleware);

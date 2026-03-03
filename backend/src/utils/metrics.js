@@ -6,18 +6,24 @@ const register = new client.Registry();
 // Add default metrics (CPU, memory, event loop lag, etc.)
 client.collectDefaultMetrics({ register });
 
-// Custom metrics for the game
+// RED metrics for HTTP traffic.
 const httpRequestDuration = new client.Histogram({
-  name: 'http_request_duration_seconds',
-  help: 'Duration of HTTP requests in seconds',
-  labelNames: ['method', 'route', 'status_code'],
-  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5]
+  name: 'http_server_request_duration_seconds',
+  help: 'Duration of HTTP server requests in seconds',
+  labelNames: ['method', 'route', 'status_code', 'status_class'],
+  buckets: [0.01, 0.025, 0.05, 0.1, 0.3, 0.5, 1, 2, 5]
 });
 
 const httpRequestTotal = new client.Counter({
-  name: 'http_requests_total',
-  help: 'Total number of HTTP requests',
-  labelNames: ['method', 'route', 'status_code']
+  name: 'http_server_requests_total',
+  help: 'Total number of HTTP server requests',
+  labelNames: ['method', 'route', 'status_code', 'status_class']
+});
+
+const httpRequestErrorsTotal = new client.Counter({
+  name: 'http_server_errors_total',
+  help: 'Total number of HTTP server error responses',
+  labelNames: ['method', 'route', 'status_code', 'status_class']
 });
 
 const gameRoundsTotal = new client.Counter({
@@ -63,6 +69,7 @@ const databaseQueryDuration = new client.Histogram({
 // Register custom metrics
 register.registerMetric(httpRequestDuration);
 register.registerMetric(httpRequestTotal);
+register.registerMetric(httpRequestErrorsTotal);
 register.registerMetric(gameRoundsTotal);
 register.registerMetric(gameChoicesTotal);
 register.registerMetric(activeGames);
@@ -75,6 +82,7 @@ export {
   register,
   httpRequestDuration,
   httpRequestTotal,
+  httpRequestErrorsTotal,
   gameRoundsTotal,
   gameChoicesTotal,
   activeGames,
