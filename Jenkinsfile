@@ -1034,10 +1034,10 @@ EOF
 
                                 LOG_GROUPS="$(aws ecs describe-task-definition \
                                   --task-definition "${CURRENT_TASKDEF_ARN}" \
-                                  --query "taskDefinition.containerDefinitions[].logConfiguration.options" \
+                                  --query 'taskDefinition.containerDefinitions[].logConfiguration.options."awslogs-group"' \
                                   --output text | \
                                   tr "\t" "\n" | \
-                                  sed -n "s/.*awslogs-group=\\([^, ]*\\).*/\\1/p" | \
+                                  sed '/^None$/d' | \
                                   sort -u | \
                                   tr "\n" " ")"
 
