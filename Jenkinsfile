@@ -768,10 +768,13 @@ pipeline {
 
                                 if [ "${DEPLOYMENT_STRATEGY}" = "CODE_DEPLOY" ] || [ "${DEPLOYMENT_STRATEGY}" = "BLUE_GREEN" ]; then
                                     if [ -z "${CODEDEPLOY_APPLICATION_NAME}" ] || [ -z "${CODEDEPLOY_DEPLOYMENT_GROUP}" ]; then
-                                        echo "ERROR: CODEDEPLOY_APPLICATION_NAME and CODEDEPLOY_DEPLOYMENT_GROUP are required for CODE_DEPLOY strategy"
-                                        exit 1
+                                        echo "WARNING: CODEDEPLOY_APPLICATION_NAME/CODEDEPLOY_DEPLOYMENT_GROUP not set."
+                                        echo "Falling back to ROLLING deployment strategy."
+                                        DEPLOYMENT_STRATEGY="ROLLING"
                                     fi
+                                fi
 
+                                if [ "${DEPLOYMENT_STRATEGY}" = "CODE_DEPLOY" ] || [ "${DEPLOYMENT_STRATEGY}" = "BLUE_GREEN" ]; then
                                     FRONTEND_CONTAINER_NAME_VALUE="${ECS_FRONTEND_CONTAINER_NAME:-frontend}"
                                     FRONTEND_CONTAINER_PORT_VALUE="${ECS_FRONTEND_CONTAINER_PORT:-80}"
 
