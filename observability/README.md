@@ -11,11 +11,15 @@
   - p95 latency > 300ms for 10 minutes
 - Grafana dashboard for rate, errors, latency, CPU/memory, and trace drilldown links
 
-## Start stack
+## Existing monitoring stack
 
-Use your existing deployment path (Jenkins/ECS) or local compose.
+Use your existing Prometheus/Grafana/Jaeger setup.
 
-If running locally, ensure `BACKEND_IMAGE` and `FRONTEND_IMAGE` are set to valid images first.
+Required backend env vars:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` (your OTLP HTTP endpoint, e.g. Jaeger collector URL)
+- `OTEL_SERVICE_NAME` (defaults to `rps-backend`)
+- `LOG_LEVEL` (optional, defaults to `info`)
 
 ## Validate alert -> trace -> log correlation
 
@@ -30,14 +34,12 @@ If running locally, ensure `BACKEND_IMAGE` and `FRONTEND_IMAGE` are set to valid
    - `HighErrorRate`
    - `HighRequestLatencyP95`
 
-3. Open Grafana dashboard:
+3. Open your Grafana dashboard:
 
-   - `http://localhost:3000`
-   - Dashboard: `RPS Observability - RED + Traces`
+   - Dashboard: `RPS Observability - RED + Traces` (import from `observability/grafana/dashboards/rps-observability.json`)
 
 4. Open Jaeger and verify traces for `rps-backend`:
-
-   - `http://localhost:16686`
+   - Use your existing Jaeger URL
 
 5. In CloudWatch or Loki, filter logs using a `trace_id` from step 4 and confirm matching JSON logs include:
 

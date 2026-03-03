@@ -164,13 +164,14 @@ All AWS resources were properly cleaned up after verification to avoid unnecess 
 - `http_server_errors_total` (Errors)
 - `http_server_request_duration_seconds` (Duration histogram)
 
-### Local Observability Stack
+### Existing Monitoring Stack
 
-`docker-compose.yml` now includes:
+Use your existing Prometheus/Grafana/Jaeger servers.
 
-- `jaeger` (UI: `http://localhost:16686`)
-- `prometheus` (UI: `http://localhost:9090`)
-- `grafana` (UI: `http://localhost:3000`, default `admin/admin`)
+Backend must be configured with:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` (your collector OTLP HTTP endpoint)
+- `OTEL_SERVICE_NAME` (defaults to `rps-backend`)
 
 Grafana dashboard file:
 
@@ -187,6 +188,14 @@ Prometheus alert rules:
 Use the built-in script to generate load and validation errors (without adding permanent test routes):
 
 ```bash
+./scripts/validate-observability.sh
+```
+
+You can override endpoints for your environment:
+
+```bash
+PROMETHEUS_URL=https://your-prometheus \
+JAEGER_API_URL=https://your-jaeger \
 ./scripts/validate-observability.sh
 ```
 

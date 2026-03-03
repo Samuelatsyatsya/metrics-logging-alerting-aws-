@@ -43,17 +43,15 @@ services:
       DB_NAME: ${MYSQL_DATABASE}
       API_PREFIX: /api/v1
       CORS_ORIGIN: "*"
-      OTEL_SERVICE_NAME: rps-backend
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-rps-backend}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
       OTEL_TRACES_EXPORTER: otlp
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_RESOURCE_ATTRIBUTES: deployment.environment=${NODE_ENV}
-      LOG_LEVEL: info
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     depends_on:
       mysql:
         condition: service_healthy
-      jaeger:
-        condition: service_started
     networks:
       - app-network
 
@@ -71,61 +69,8 @@ services:
     networks:
       - app-network
 
-  jaeger:
-    image: jaegertracing/all-in-one:1.59
-    container_name: rps-jaeger
-    restart: unless-stopped
-    environment:
-      COLLECTOR_OTLP_ENABLED: "true"
-    ports:
-      - "16686:16686"
-      - "4318:4318"
-    networks:
-      - app-network
-
-  prometheus:
-    image: prom/prometheus:v2.54.1
-    container_name: rps-prometheus
-    restart: unless-stopped
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --web.enable-lifecycle
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
-      - prometheus-data:/prometheus
-    depends_on:
-      - backend
-    networks:
-      - app-network
-
-  grafana:
-    image: grafana/grafana:11.2.0
-    container_name: rps-grafana
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_USERS_ALLOW_SIGN_UP: "false"
-    volumes:
-      - grafana-data:/var/lib/grafana
-      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    depends_on:
-      - prometheus
-      - jaeger
-    networks:
-      - app-network
-
 volumes:
   mysql-data:
-  prometheus-data:
-  grafana-data:
 
 networks:
   app-network:
