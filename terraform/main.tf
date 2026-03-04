@@ -43,6 +43,7 @@ module "network" {
   enable_dns_support             = var.network_enable_dns_support
   enable_dns_hostnames           = var.network_enable_dns_hostnames
   frontend_container_port        = var.ecs_frontend_container_port
+  backend_container_port         = var.ecs_backend_container_port
   health_check_path              = var.ecs_health_check_path
   alb_internal                   = var.ecs_alb_internal
   alb_drop_invalid_header_fields = var.ecs_alb_drop_invalid_header_fields
@@ -88,27 +89,28 @@ module "ecs" {
   count  = var.enable_ecs ? 1 : 0
   source = "./modules/ecs"
 
-  project_name               = var.project_name
-  aws_region                 = var.aws_region
-  subnet_ids                 = module.network[0].subnet_ids
-  service_security_group_id  = module.network[0].ecs_service_security_group_id
-  frontend_target_group_arn  = module.network[0].frontend_target_group_arn
-  deployment_controller_type = var.ecs_deployment_controller_type
-  assign_public_ip           = var.ecs_assign_public_ip
-  desired_count              = var.ecs_desired_count
-  task_cpu                   = var.ecs_task_cpu
-  task_memory                = var.ecs_task_memory
-  backend_container_name     = var.ecs_backend_container_name
-  frontend_container_name    = var.ecs_frontend_container_name
-  backend_container_port     = var.ecs_backend_container_port
-  frontend_container_port    = var.ecs_frontend_container_port
-  backend_env                = local.backend_env_for_ecs
-  backend_secrets            = local.backend_secrets_for_ecs
-  backend_secret_arns        = local.backend_secret_arns_for_ecs
-  frontend_env               = var.ecs_frontend_env
-  backend_image              = var.backend_image
-  frontend_image             = var.frontend_image
-  tags                       = var.tags
+  project_name                     = var.project_name
+  aws_region                       = var.aws_region
+  subnet_ids                       = module.network[0].subnet_ids
+  service_security_group_id        = module.network[0].ecs_service_security_group_id
+  frontend_target_group_arn        = module.network[0].frontend_target_group_arn
+  backend_metrics_target_group_arn = module.network[0].backend_metrics_target_group_arn
+  deployment_controller_type       = var.ecs_deployment_controller_type
+  assign_public_ip                 = var.ecs_assign_public_ip
+  desired_count                    = var.ecs_desired_count
+  task_cpu                         = var.ecs_task_cpu
+  task_memory                      = var.ecs_task_memory
+  backend_container_name           = var.ecs_backend_container_name
+  frontend_container_name          = var.ecs_frontend_container_name
+  backend_container_port           = var.ecs_backend_container_port
+  frontend_container_port          = var.ecs_frontend_container_port
+  backend_env                      = local.backend_env_for_ecs
+  backend_secrets                  = local.backend_secrets_for_ecs
+  backend_secret_arns              = local.backend_secret_arns_for_ecs
+  frontend_env                     = var.ecs_frontend_env
+  backend_image                    = var.backend_image
+  frontend_image                   = var.frontend_image
+  tags                             = var.tags
 
   depends_on = [module.network, module.rds]
 }

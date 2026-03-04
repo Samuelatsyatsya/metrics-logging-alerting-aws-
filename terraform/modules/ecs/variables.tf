@@ -23,6 +23,11 @@ variable "frontend_target_group_arn" {
   type        = string
 }
 
+variable "backend_metrics_target_group_arn" {
+  description = "ALB target group ARN for backend metrics container endpoint"
+  type        = string
+}
+
 variable "deployment_controller_type" {
   description = "ECS deployment controller type (ECS or CODE_DEPLOY)"
   type        = string

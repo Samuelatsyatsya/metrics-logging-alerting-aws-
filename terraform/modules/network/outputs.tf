@@ -18,6 +18,11 @@ output "frontend_target_group_name" {
   value       = aws_lb_target_group.frontend.name
 }
 
+output "backend_metrics_target_group_arn" {
+  description = "Target group ARN for backend metrics endpoint"
+  value       = aws_lb_target_group.backend_metrics.arn
+}
+
 output "ecs_service_security_group_id" {
   description = "Security group ID to attach to ECS service tasks"
   value       = aws_security_group.ecs_service.id

@@ -177,5 +177,11 @@ resource "aws_ecs_service" "app" {
     container_port   = var.frontend_container_port
   }
 
+  load_balancer {
+    target_group_arn = var.backend_metrics_target_group_arn
+    container_name   = var.backend_container_name
+    container_port   = var.backend_container_port
+  }
+
   tags = var.tags
 }

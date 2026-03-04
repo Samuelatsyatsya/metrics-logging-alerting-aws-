@@ -48,6 +48,11 @@ variable "frontend_container_port" {
   type        = number
 }
 
+variable "backend_container_port" {
+  description = "Backend container port used for metrics routing"
+  type        = number
+}
+
 variable "health_check_path" {
   description = "ALB target group health check path for the frontend service"
   type        = string

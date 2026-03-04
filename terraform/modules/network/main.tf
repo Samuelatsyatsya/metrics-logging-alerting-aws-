@@ -110,6 +110,13 @@ resource "aws_security_group" "ecs_service" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  ingress {
+    from_port       = var.backend_container_port
+    to_port         = var.backend_container_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -159,6 +166,31 @@ resource "aws_lb_target_group" "frontend" {
   tags = var.tags
 }
 
+resource "aws_lb_target_group" "backend_metrics" {
+  # Dedicated target group for backend /metrics scraping via ALB.
+  name_prefix = "btg-"
+  port        = var.backend_container_port
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = aws_vpc.main.id
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  health_check {
+    path                = "/health"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    healthy_threshold   = 2
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+  }
+
+  tags = var.tags
+}
+
 resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.main.arn
   port              = var.alb_listener_port
@@ -167,5 +199,21 @@ resource "aws_lb_listener" "https" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.frontend.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "backend_metrics" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend_metrics.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/metrics", "/metrics/*"]
+    }
   }
 }
