@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { validate } from '../src/middleware/validate.js';
-import { submitGameValidation } from '../src/validations/game.validations.js';
+import { submitGameValidation, usernameValidation } from '../src/validations/game.validations.js';
 
 function createResponseDouble() {
   return {
@@ -62,4 +62,23 @@ test('validate middleware responds with 400 when body is invalid', () => {
   assert.equal(res.payload.message, 'Validation failed');
   assert.ok(Array.isArray(res.payload.errors));
   assert.ok(res.payload.errors.length > 0);
+});
+
+test('validate middleware validates params when source is params', () => {
+  const middleware = validate(usernameValidation, 'params');
+  const req = {
+    body: {},
+    params: {
+      username: 'test_user'
+    }
+  };
+  const res = createResponseDouble();
+
+  let nextCalled = false;
+  middleware(req, res, () => {
+    nextCalled = true;
+  });
+
+  assert.equal(nextCalled, true);
+  assert.equal(res.statusCode, undefined);
 });
