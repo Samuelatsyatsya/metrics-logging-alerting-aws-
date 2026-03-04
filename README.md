@@ -18,6 +18,10 @@ The goal is to provide end-to-end visibility into application performance, infra
 - AWS GuardDuty for threat detection
 - Amazon S3 for secure log storage
 
+
+
+![Monitoring](https://github.com/user-attachments/assets/2085ec6c-01c9-4455-bff4-5e3d3aba622c)
+
 --- 
 
 ## Tools & Technologies
