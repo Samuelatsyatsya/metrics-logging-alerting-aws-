@@ -1,8 +1,5 @@
 import { shutdownTracing } from "./src/observability/tracing.js";
 import dotenv from "dotenv";
-import { testConnection, sequelize } from "./src/config/db.js";
-import app from "./src/app.js";
-import { startMetricsUpdater } from "./src/utils/metricsUpdater.js";
 import { logger } from "./src/observability/logger.js";
 
 // Load environment variables
@@ -14,6 +11,7 @@ const HOST = process.env.HOST || "0.0.0.0";
 let metricsUpdaterInterval = null;
 let httpServer = null;
 let shuttingDown = false;
+let sequelizeConnection = null;
 
 const gracefulShutdown = async (signal) => {
   if (shuttingDown) {
@@ -32,7 +30,9 @@ const gracefulShutdown = async (signal) => {
       await new Promise((resolve) => httpServer.close(resolve));
     }
 
-    await sequelize.close();
+    if (sequelizeConnection) {
+      await sequelizeConnection.close();
+    }
     await shutdownTracing();
     logger.info("shutdown_completed", { signal });
     process.exit(0);
@@ -44,6 +44,17 @@ const gracefulShutdown = async (signal) => {
 
 async function startServer() {
   try {
+    // Load app/database only after tracing is initialized so HTTP/Express are instrumented.
+    const [{ default: app }, dbModule, metricsUpdaterModule] = await Promise.all([
+      import("./src/app.js"),
+      import("./src/config/db.js"),
+      import("./src/utils/metricsUpdater.js")
+    ]);
+
+    const { testConnection, sequelize } = dbModule;
+    const { startMetricsUpdater } = metricsUpdaterModule;
+    sequelizeConnection = sequelize;
+
     // Test database connection
     const dbConnected = await testConnection();
 
