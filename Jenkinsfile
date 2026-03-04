@@ -42,6 +42,8 @@ pipeline {
 
         // Snyk
         SNYK_TOKEN = credentials('SNYK_TOKEN')
+        OTEL_SERVICE_NAME = credentials('OTEL_SERVICE_NAME')
+        OTEL_EXPORTER_OTLP_ENDPOINT = credentials('OTEL_EXPORTER_OTLP_ENDPOINT')
     }
     
     stages {
@@ -535,6 +537,11 @@ pipeline {
                             exit 1
                         fi
 
+                        if [ -z "${OTEL_SERVICE_NAME:-}" ] || [ -z "${OTEL_EXPORTER_OTLP_ENDPOINT:-}" ]; then
+                            echo "ERROR: OTEL_SERVICE_NAME and OTEL_EXPORTER_OTLP_ENDPOINT are required"
+                            exit 1
+                        fi
+
                         AWS_CLI_IMAGE=""
                         for CANDIDATE in public.ecr.aws/aws-cli/aws-cli:latest amazon/aws-cli:latest; do
                             if docker pull "${CANDIDATE}" >/dev/null 2>&1; then
@@ -585,6 +592,8 @@ pipeline {
                               --arg frontendImage "${ECR_FRONTEND_REPO}:${IMAGE_TAG}" \
                               --arg backendName "${BACKEND_CONTAINER_NAME_VALUE}" \
                               --arg frontendName "${FRONTEND_CONTAINER_NAME_VALUE}" \
+                              --arg otelServiceName "${OTEL_SERVICE_NAME}" \
+                              --arg otelOtlpEndpoint "${OTEL_EXPORTER_OTLP_ENDPOINT}" \
                               '
                                 del(
                                   .taskDefinitionArn,
@@ -597,7 +606,16 @@ pipeline {
                                   .deregisteredAt
                                 )
                                 | .containerDefinitions |= map(
-                                    if .name == $backendName then .image = $backendImage
+                                    if .name == $backendName then
+                                      .image = $backendImage
+                                      | .environment = (
+                                          ((.environment // [])
+                                          | map(select(.name != "OTEL_SERVICE_NAME" and .name != "OTEL_EXPORTER_OTLP_ENDPOINT")))
+                                          + [
+                                              { "name": "OTEL_SERVICE_NAME", "value": $otelServiceName },
+                                              { "name": "OTEL_EXPORTER_OTLP_ENDPOINT", "value": $otelOtlpEndpoint }
+                                            ]
+                                        )
                                     elif .name == $frontendName then .image = $frontendImage
                                     elif (.name | test("backend"; "i")) then .image = $backendImage
                                     elif (.name | test("frontend"; "i")) then .image = $frontendImage
@@ -625,6 +643,8 @@ pipeline {
                                 --arg frontendImage "${ECR_FRONTEND_REPO}:${IMAGE_TAG}" \
                                 --arg backendName "${BACKEND_CONTAINER_NAME_VALUE}" \
                                 --arg frontendName "${FRONTEND_CONTAINER_NAME_VALUE}" \
+                                --arg otelServiceName "${OTEL_SERVICE_NAME}" \
+                                --arg otelOtlpEndpoint "${OTEL_EXPORTER_OTLP_ENDPOINT}" \
                                 '
                                     del(
                                       .taskDefinitionArn,
@@ -637,7 +657,16 @@ pipeline {
                                       .deregisteredAt
                                     )
                                     | .containerDefinitions |= map(
-                                        if .name == $backendName then .image = $backendImage
+                                        if .name == $backendName then
+                                          .image = $backendImage
+                                          | .environment = (
+                                              ((.environment // [])
+                                              | map(select(.name != "OTEL_SERVICE_NAME" and .name != "OTEL_EXPORTER_OTLP_ENDPOINT")))
+                                              + [
+                                                  { "name": "OTEL_SERVICE_NAME", "value": $otelServiceName },
+                                                  { "name": "OTEL_EXPORTER_OTLP_ENDPOINT", "value": $otelOtlpEndpoint }
+                                                ]
+                                            )
                                         elif .name == $frontendName then .image = $frontendImage
                                         elif (.name | test("backend"; "i")) then .image = $backendImage
                                         elif (.name | test("frontend"; "i")) then .image = $frontendImage
