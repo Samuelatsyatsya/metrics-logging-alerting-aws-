@@ -35,6 +35,8 @@ Relevant files already present:
 - `terraform/modules/guardduty/*` (GuardDuty detector)
 
 ## 3. Architecture Summary
+<img width="1702" height="1647" alt="Monitoring" src="https://github.com/user-attachments/assets/9360bf74-e661-4d08-8f9d-24d4a6630e6f" />
+
 
 1. Frontend (Vite/React) calls backend API.
 2. Backend (Express) writes to MySQL and exposes `/metrics`.
