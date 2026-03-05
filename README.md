@@ -182,24 +182,27 @@ Minimum fields per service in `docker-compose.yml`:
 - [ ] CloudTrail events are recorded in CloudWatch + S3
 - [ ] GuardDuty findings appear when test activity is generated
 
-## 12. Deliverables for Submission
+## 12. Screenshots
+<img width="1918" height="1016" alt="Node Exporter 1" src="https://github.com/user-attachments/assets/697ab5ac-2846-4795-b4aa-8bcda8678f03" />
+<img width="1918" height="998" alt="Prometheus3" src="https://github.com/user-attachments/assets/c7506535-2705-4198-9aa0-7cd2b16a82bc" />
+<img width="1918" height="1016" alt="Prometheus2" src="https://github.com/user-attachments/assets/48fb37ff-565d-4674-8ad4-dede831efc1a" />
+<img width="1918" height="1019" alt="Prometheus1" src="https://github.com/user-attachments/assets/f6188e74-9260-4fe2-84e1-c739a2654af0" />
+<img width="1918" height="1012" alt="Grafana2" src="https://github.com/user-attachments/assets/3715fe61-125b-4afd-b5fb-9e2639f40af3" />
+<img width="1918" height="1019" alt="Grafana1" src="https://github.com/user-attachments/assets/8425bf85-f101-4fa6-8ad0-7c274526df9e" />
+<img width="1907" height="1015" alt="Monitoring d" src="https://github.com/user-attachments/assets/f9b0f6c3-e66e-4f0f-96ad-93b62a242e85" />
+<img width="1918" height="1035" alt="Monitoring c" src="https://github.com/user-attachments/assets/8377221b-af77-42ef-9e0c-35873504a728" />
+<img width="1902" height="1027" alt="Monitoring b" src="https://github.com/user-attachments/assets/8d61e15a-568b-4ba5-965a-0fa508d8ae4e" />
+<img width="1918" height="1035" alt="Monitoring a" src="https://github.com/user-attachments/assets/c0bd1d5f-3b59-4a64-81e9-e2abbd52d69d" />
+<img width="1918" height="1029" alt="Monitoring 3" src="https://github.com/user-attachments/assets/7b48c9f0-7935-4cfd-ac2b-4cdc986ab7fd" />
+<img width="1918" height="1005" alt="monitoring 2" src="https://github.com/user-attachments/assets/7765e4e1-960a-4d35-bc86-abb2c7246c63" />
+<img width="1918" height="1005" alt="monitoring 1" src="https://github.com/user-attachments/assets/e6769a58-4acf-48bc-ad5a-b25dea53649d" />
+<img width="1918" height="1002" alt="Grafana 5" src="https://github.com/user-attachments/assets/10d6815c-29e2-4d6c-b137-cc8ff2b75e1e" />
+<img width="1918" height="1019" alt="Grafana 4" src="https://github.com/user-attachments/assets/805d7303-5d3d-493c-80bb-2f67ecee6141" />
+<img width="1918" height="998" alt="Grafana 3" src="https://github.com/user-attachments/assets/568f9d66-4cf2-4c03-beaf-92381713aa24" />
+<img width="1918" height="1019" alt="Prometheus4" src="https://github.com/user-attachments/assets/de324672-ca1c-4120-ace7-90d8c9d0b67c" />
+<img width="1916" height="1002" alt="Node Exporter 2" src="https://github.com/user-attachments/assets/8edd9994-7998-4948-8a72-1b27c4fecfab" />
 
-Include in this repo:
 
-- `observability/prometheus/prometheus.yml`
-- `observability/prometheus/alerts.yml`
-- `observability/grafana/dashboards/rps-observability.json`
-- screenshots:
-  - dashboards
-  - alert firing/resolved
-  - CloudWatch logs
-  - CloudTrail events
-  - GuardDuty findings
-- 2-page report summarizing:
-  - architecture
-  - metrics/alerts behavior
-  - security findings
-  - key insights and remediation actions
 
 ## 13. Cleanup
 
